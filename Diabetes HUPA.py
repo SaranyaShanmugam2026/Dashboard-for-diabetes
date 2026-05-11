@@ -7,7 +7,7 @@ import plotly.express as px
 # PAGE CONFIG
 # =========================================================
 st.set_page_config(
-    page_title="AI Diabetes Clinical Intelligence System",
+    page_title="Clinical AI Diabetes System",
     page_icon="🩺",
     layout="wide"
 )
@@ -32,208 +32,191 @@ def load_data():
 
     if "time" in df.columns:
         df["time"] = pd.to_datetime(df["time"])
-        df["hour"] = df["time"].dt.hour
+        df = df.sort_values("time")
 
+    # Basic feature engineering
     if "glucose" in df.columns:
         df["glucose_roc"] = df["glucose"].diff()
         df["glucose_std"] = df["glucose"].rolling(12).std().fillna(0)
-
-        # Time in Range
-        df["tir"] = df["glucose"].between(70, 180).astype(int)
-
-        # Risk score (simple prototype AI)
-        df["risk_score"] = (
-            abs(df["glucose_roc"]) * 0.4 +
-            df["glucose_std"] * 0.4 +
-            (df["glucose"] > 180).astype(int) * 0.2
-        )
 
     return df
 
 df = load_data()
 
 # =========================================================
-# SIDEBAR
+# SIDEBAR - INTERACTIVE CONTROLS
 # =========================================================
-st.sidebar.title("🧠 Clinical AI System")
+st.sidebar.title("🧠 Clinical AI Controls")
 
-menu = st.sidebar.radio(
-    "Modules",
-    [
-        "Patient Overview",
-        "Glucose Dynamics",
-        "Risk & Events",
-        "Insulin Intelligence",
-        "Meal & Activity",
-        "Predictive AI"
-    ]
+patient_list = ["All"] + list(df["patient_id"].unique()) if "patient_id" in df.columns else ["All"]
+
+patient = st.sidebar.selectbox("Select Patient", patient_list)
+
+hypo_threshold = st.sidebar.slider("Hypoglycemia Threshold", 50, 80, 70)
+hyper_threshold = st.sidebar.slider("Hyperglycemia Threshold", 150, 250, 180)
+time_window = st.sidebar.slider("Time Window (hours)", 6, 72, 24)
+
+compare_mode = st.sidebar.multiselect(
+    "Compare Patients",
+    df["patient_id"].unique() if "patient_id" in df.columns else []
 )
 
-if "patient_id" in df.columns:
-    patient = st.sidebar.selectbox(
-        "Select Patient",
-        ["All"] + list(df["patient_id"].unique())
-    )
+insulin_sim = st.sidebar.slider("Simulated Insulin Effect (%)", 0, 50, 0)
 
-    if patient != "All":
-        df = df[df["patient_id"] == patient]
+# =========================================================
+# FILTER DATA
+# =========================================================
+if patient != "All":
+    df = df[df["patient_id"] == patient]
+
+if "time" in df.columns:
+    max_time = df["time"].max()
+    min_time = max_time - pd.Timedelta(hours=time_window)
+    df = df[df["time"] >= min_time]
 
 # =========================================================
 # TITLE
 # =========================================================
-st.title("🩺 Clinical Diabetes AI Intelligence System")
+st.title("🩺 Clinical AI Diabetes Intelligence System")
 
 # =========================================================
-# 1. PATIENT OVERVIEW
+# KPI SECTION (DYNAMIC)
 # =========================================================
-if menu == "Patient Overview":
+col1, col2, col3, col4 = st.columns(4)
 
-    st.subheader("📊 Patient Summary KPIs")
+if "glucose" in df.columns:
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Avg Glucose", round(df["glucose"].mean(), 2))
+    col2.metric("Max Glucose", round(df["glucose"].max(), 2))
+    col3.metric("Min Glucose", round(df["glucose"].min(), 2))
 
-    if "glucose" in df.columns:
-        col1.metric("Avg Glucose", round(df["glucose"].mean(), 2))
-        col2.metric("Max Glucose", round(df["glucose"].max(), 2))
-        col3.metric("Min Glucose", round(df["glucose"].min(), 2))
-        col4.metric("TIR %", round(df["tir"].mean() * 100, 2))
-
-    if "time" in df.columns and "glucose" in df.columns:
-        fig = px.line(df, x="time", y="glucose", title="24-Hour Glucose Trend")
-        st.plotly_chart(fig, use_container_width=True)
+    tir = df["glucose"].between(hypo_threshold, hyper_threshold).mean() * 100
+    col4.metric("Time in Range %", round(tir, 2))
 
 # =========================================================
-# 2. GLUCOSE DYNAMICS
+# RISK SCORE (DYNAMIC AI LOGIC)
 # =========================================================
-elif menu == "Glucose Dynamics":
+if "glucose" in df.columns:
 
-    st.subheader("📈 Glucose Dynamics Engine")
+    df["risk_score"] = (
+        (df["glucose"] > hyper_threshold).astype(int) * 0.6 +
+        (df["glucose"] < hypo_threshold).astype(int) * 0.6 +
+        df["glucose_std"]
+    )
 
-    col1, col2 = st.columns(2)
-
-    if "glucose_roc" in df.columns:
-        fig1 = px.line(df, y="glucose_roc", title="Glucose Rate of Change (ROC)")
-        col1.plotly_chart(fig1, use_container_width=True)
-
-    if "glucose_std" in df.columns:
-        fig2 = px.line(df, y="glucose_std", title="Glucose Variability")
-        col2.plotly_chart(fig2, use_container_width=True)
-
-# =========================================================
-# 3. RISK & EVENTS
-# =========================================================
-elif menu == "Risk & Events":
-
-    st.subheader("🚨 Risk Detection System")
-
-    if "glucose" in df.columns:
-
-        high_risk = df[df["glucose"] > 200]
-        low_risk = df[df["glucose"] < 70]
-
-        st.metric("Hyperglycemia Events", len(high_risk))
-        st.metric("Hypoglycemia Events", len(low_risk))
-
-        fig = px.scatter(
-            df,
-            x="time",
-            y="glucose",
-            color="risk_score",
-            title="Risk Heatmap Over Time"
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
+    # =====================================================
+    # SIMULATION (WHAT-IF INSULIN EFFECT)
+    # =====================================================
+    df["simulated_glucose"] = df["glucose"] - (df.get("insulin", 0) * insulin_sim * 0.1)
 
 # =========================================================
-# 4. INSULIN INTELLIGENCE
+# MAIN CHARTS (INTERACTIVE)
 # =========================================================
-elif menu == "Insulin Intelligence":
+st.subheader("📈 Glucose Trend (Interactive)")
 
-    st.subheader("🧠 Insulin Effectiveness System")
+if "time" in df.columns and "glucose" in df.columns:
 
-    if "glucose" in df.columns and "insulin" in df.columns:
+    fig = px.line(
+        df,
+        x="time",
+        y="glucose",
+        color="patient_id" if "patient_id" in df.columns else None,
+        title="Real-Time Glucose Trend"
+    )
 
-        # Simple effectiveness score (prototype)
-        df["insulin_effectiveness"] = (
-            100 - (df["risk_score"] * 2)
-        ).clip(0, 100)
+    fig.add_hline(y=hypo_threshold, line_dash="dash", line_color="red")
+    fig.add_hline(y=hyper_threshold, line_dash="dash", line_color="orange")
 
-        st.metric(
-            "Avg Insulin Effectiveness Score",
-            round(df["insulin_effectiveness"].mean(), 2)
-        )
-
-        fig = px.scatter(
-            df,
-            x="insulin",
-            y="glucose",
-            color="insulin_effectiveness",
-            title="Insulin vs Glucose Response"
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True)
 
 # =========================================================
-# 5. MEAL & ACTIVITY
+# RISK VISUALIZATION
 # =========================================================
-elif menu == "Meal & Activity":
+st.subheader("🚨 Risk Analysis Engine")
 
-    st.subheader("🍽️ Nutrition & Activity Impact")
+if "glucose" in df.columns:
 
-    if "carb_input" in df.columns and "glucose" in df.columns:
+    fig2 = px.scatter(
+        df,
+        x="time",
+        y="glucose",
+        color="risk_score",
+        title="Glucose Risk Heatmap"
+    )
 
-        fig1 = px.scatter(
-            df,
-            x="carb_input",
-            y="glucose",
-            title="Carbs vs Glucose Spike"
-        )
-
-        st.plotly_chart(fig1, use_container_width=True)
-
-    if "steps" in df.columns and "glucose" in df.columns:
-
-        fig2 = px.scatter(
-            df,
-            x="steps",
-            y="glucose",
-            title="Activity vs Glucose Control"
-        )
-
-        st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, use_container_width=True)
 
 # =========================================================
-# 6. PREDICTIVE AI
+# GLUCOSE VARIABILITY
 # =========================================================
-elif menu == "Predictive AI":
+st.subheader("📊 Glucose Variability")
 
-    st.subheader("🤖 Predictive Intelligence Engine")
+if "glucose_std" in df.columns:
 
-    if "risk_score" in df.columns:
+    fig3 = px.line(
+        df,
+        y="glucose_std",
+        title="Rolling Glucose Variability"
+    )
 
-        df["predicted_risk"] = df["risk_score"].shift(-1).fillna(0)
+    st.plotly_chart(fig3, use_container_width=True)
 
-        fig = px.line(
-            df,
-            y="predicted_risk",
-            title="Predicted Glucose Risk Trend"
-        )
+# =========================================================
+# WHAT-IF SIMULATION
+# =========================================================
+st.subheader("🧪 What-If Simulation")
 
-        st.plotly_chart(fig, use_container_width=True)
+if "insulin" in df.columns:
 
-        st.markdown("### AI Alerts")
+    fig4 = px.line(
+        df,
+        x="time",
+        y=["glucose", "simulated_glucose"],
+        title="Actual vs Simulated Glucose Response"
+    )
 
-        if df["risk_score"].mean() > 50:
-            st.error("High instability predicted → intervention needed")
+    st.plotly_chart(fig4, use_container_width=True)
 
-        elif df["risk_score"].mean() > 30:
-            st.warning("Moderate risk detected")
+# =========================================================
+# PATIENT COMPARISON
+# =========================================================
+if compare_mode:
 
-        else:
-            st.success("Stable metabolic pattern")
+    st.subheader("👥 Patient Comparison")
+
+    compare_df = df[df["patient_id"].isin(compare_mode)]
+
+    fig5 = px.line(
+        compare_df,
+        x="time",
+        y="glucose",
+        color="patient_id",
+        title="Patient Comparison - Glucose Trends"
+    )
+
+    st.plotly_chart(fig5, use_container_width=True)
+
+# =========================================================
+# AI INSIGHTS PANEL
+# =========================================================
+st.subheader("🧠 AI Insights Engine")
+
+if "glucose" in df.columns:
+
+    avg_glucose = df["glucose"].mean()
+
+    if avg_glucose > hyper_threshold:
+        st.error("High glucose instability detected → risk of hyperglycemia")
+    elif avg_glucose < hypo_threshold:
+        st.warning("Low glucose trend → hypoglycemia risk")
+    else:
+        st.success("Metabolic pattern stable within target range")
+
+    if df["risk_score"].mean() > 1:
+        st.info("Elevated variability detected → monitor insulin response")
 
 # =========================================================
 # FOOTER
 # =========================================================
 st.markdown("---")
-st.caption("Clinical AI Diabetes System | Streamlit + Predictive Analytics")
+st.caption("Clinical AI System | Interactive Diabetes Intelligence Dashboard")
