@@ -10,9 +10,55 @@ import plotly.graph_objects as go
 st.set_page_config(
     page_title="AI Diabetes Intelligence Dashboard",
     page_icon="🩺",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
+
+# ======================================================
+# UI STYLING (YOUR ATTRACTIVE DESIGN BACK)
+# ======================================================
+st.markdown("""
+<style>
+
+.main {
+    background: linear-gradient(135deg, #081229, #0B1F3A);
+}
+
+h1, h2, h3 {
+    color: white;
+}
+
+/* KPI CARDS */
+.kpi {
+    background: #EAF3FF;
+    padding: 16px;
+    border-radius: 18px;
+    text-align: center;
+    box-shadow: 0px 6px 20px rgba(0,0,0,0.15);
+}
+
+.kpi-title {
+    font-size: 14px;
+    color: #1B3B6F;
+    font-weight: 600;
+}
+
+.kpi-value {
+    font-size: 28px;
+    font-weight: bold;
+    color: #081229;
+}
+
+/* INSIGHT BOX */
+.insight {
+    background: #EAF3FF;
+    padding: 18px;
+    border-radius: 18px;
+    border-left: 5px solid #1B4F8C;
+    color: #081229;
+}
+
+</style>
+""", unsafe_allow_html=True)
 
 # ======================================================
 # LOAD DATA
@@ -20,72 +66,73 @@ st.set_page_config(
 @st.cache_data
 def load_data():
 
-    # ✔ EXACT FILE NAMES FROM YOUR GITHUB
-    demo = pd.read_csv("cleaned_demographics(1).csv")
-
+    demo = pd.read_csv("cleaned_demographics.csv")
     df = pd.read_excel(
-        "cleaned_hupa_diabetes_recent(1).xlsb",
+        "cleaned_hupa_diabetes_recent.xlsb",
         engine="pyxlsb"
     )
 
-    # merge if possible
     if "patient_id" in demo.columns and "patient_id" in df.columns:
         df = df.merge(demo, on="patient_id", how="left")
 
-    # datetime handling
-    if "time" in df.columns:
-        df["time"] = pd.to_datetime(df["time"])
-        df = df.sort_values("time")
+    df["time"] = pd.to_datetime(df["time"])
+    df = df.sort_values("time")
 
-    # feature engineering
-    if "glucose" in df.columns:
-        df["glucose_roc"] = df["glucose"].diff()
-        df["glucose_rolling_std"] = df["glucose"].rolling(12).std().fillna(0)
+    df["glucose_roc"] = df["glucose"].diff()
+    df["glucose_rolling_std"] = df["glucose"].rolling(12).std().fillna(0)
 
     return df
+
+
+df = load_data()
 
 # ======================================================
 # SIDEBAR
 # ======================================================
-st.sidebar.title("🧠 Clinical AI Dashboard")
+st.sidebar.title("🧠 AI Clinical System")
 
 menu = st.sidebar.radio(
     "Navigation",
-    [
-        "Overview",
-        "Descriptive Analytics",
-        "Predictive Analytics",
-        "Prescriptive Analytics",
-        "Clinical AI Engine"
-    ]
+    ["Overview", "Predictive Analytics", "Prescriptive Analytics"]
 )
 
-patient_list = ["All Patients"] + list(df["patient_id"].unique())
-selected_patient = st.sidebar.selectbox("Select Patient", patient_list)
+# patient filter
+if "patient_id" in df.columns:
+    patient_list = ["All Patients"] + list(df["patient_id"].dropna().unique())
+else:
+    patient_list = ["All Patients"]
 
-if selected_patient != "All Patients":
-    df = df[df["patient_id"] == selected_patient]
+patient = st.sidebar.selectbox("Select Patient", patient_list)
+
+if patient != "All Patients":
+    df = df[df["patient_id"] == patient]
 
 # ======================================================
 # HEADER
 # ======================================================
-st.title("🩺 AI Clinical Diabetes Intelligence System")
+st.title("🩺 AI Diabetes Intelligence Dashboard")
 
 # ======================================================
-# KPIs
+# KPIs (BEAUTIFUL CARDS)
 # ======================================================
-avg_glucose = df["glucose"].mean()
-max_glucose = df["glucose"].max()
-min_glucose = df["glucose"].min()
-
+avg = df["glucose"].mean()
+mx = df["glucose"].max()
+mn = df["glucose"].min()
 tir = df["glucose"].between(70, 180).mean() * 100
 
-col1, col2, col3, col4 = st.columns(4)
+c1, c2, c3, c4 = st.columns(4)
 
-col1.metric("📊 Avg Glucose", f"{avg_glucose:.1f}")
-col2.metric("🔺 Max Glucose", f"{max_glucose:.1f}")
-col3.metric("🔻 Min Glucose", f"{min_glucose:.1f}")
-col4.metric("🎯 Time in Range", f"{tir:.1f}%")
+with c1:
+    st.markdown(f"<div class='kpi'><div class='kpi-title'>Avg Glucose</div><div class='kpi-value'>{avg:.1f}</div></div>", unsafe_allow_html=True)
+
+with c2:
+    st.markdown(f"<div class='kpi'><div class='kpi-title'>Max Glucose</div><div class='kpi-value'>{mx:.1f}</div></div>", unsafe_allow_html=True)
+
+with c3:
+    st.markdown(f"<div class='kpi'><div class='kpi-title'>Min Glucose</div><div class='kpi-value'>{mn:.1f}</div></div>", unsafe_allow_html=True)
+
+with c4:
+    st.markdown(f"<div class='kpi'><div class='kpi-title'>Time in Range</div><div class='kpi-value'>{tir:.1f}%</div></div>", unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -94,144 +141,48 @@ st.markdown("---")
 # ======================================================
 if menu == "Overview":
 
-    st.subheader("📘 Glucose Overview")
+    st.subheader("📊 Glucose Trends")
 
-    fig = px.line(df, x="time", y="glucose", color="patient_id")
+    fig = px.line(df, x="time", y="glucose", color="patient_id" if "patient_id" in df.columns else None)
+    fig.update_layout(template="plotly_dark")
     st.plotly_chart(fig, use_container_width=True)
 
-    fig2 = px.histogram(df, x="glucose", nbins=30)
+    fig2 = px.pie(df, names=pd.cut(df["glucose"], bins=[0,70,180,400], labels=["Low","Normal","High"]))
     st.plotly_chart(fig2, use_container_width=True)
-
-# ======================================================
-# DESCRIPTIVE
-# ======================================================
-elif menu == "Descriptive Analytics":
-
-    st.subheader("📊 Clinical Patterns")
-
-    fig1 = px.scatter(
-        df,
-        x="heart_rate",
-        y="glucose",
-        color="steps",
-        title="Heart Rate vs Glucose"
-    )
-    st.plotly_chart(fig1, use_container_width=True)
-
-    fig2 = px.line(
-        df,
-        x="time",
-        y="glucose_rolling_std",
-        title="Glucose Variability"
-    )
-    st.plotly_chart(fig2, use_container_width=True)
-
-    fig3 = px.box(
-        df,
-        y="glucose",
-        title="Glucose Distribution"
-    )
-    st.plotly_chart(fig3, use_container_width=True)
 
 # ======================================================
 # PREDICTIVE
 # ======================================================
 elif menu == "Predictive Analytics":
 
-    st.subheader("🤖 Risk Prediction Engine")
+    st.subheader("🤖 Risk Prediction")
 
-    df["risk_score"] = (
-        df["glucose_roc"].fillna(0).abs() * 0.6 +
-        df["glucose_rolling_std"] * 0.4
-    )
+    df["risk"] = df["glucose_roc"].abs() + df["glucose_rolling_std"]
 
-    fig = px.line(df, x="time", y="risk_score")
+    fig = px.line(df, x="time", y="risk", title="Risk Score Trend")
+    fig.update_layout(template="plotly_dark")
+
     st.plotly_chart(fig, use_container_width=True)
-
-    st.info("⚠ Higher risk score indicates unstable glucose trends")
 
 # ======================================================
 # PRESCRIPTIVE
 # ======================================================
 elif menu == "Prescriptive Analytics":
 
-    st.subheader("🧠 Clinical Decision Support")
+    st.subheader("🧠 Clinical Decisions")
 
     df["risk_level"] = np.where(df["glucose"] > 180, "High Risk", "Stable")
 
-    fig = px.scatter(
-        df,
-        x="time",
-        y="glucose",
-        color="risk_level"
-    )
+    fig = px.scatter(df, x="time", y="glucose", color="risk_level")
+    fig.update_layout(template="plotly_dark")
 
     st.plotly_chart(fig, use_container_width=True)
 
-    st.markdown("### 📌 Clinical Actions")
-
-    if tir < 70:
-        st.warning("Adjust insulin strategy recommended")
-    if df["glucose"].max() > 250:
-        st.error("Severe hyperglycemia detected")
-    if df["glucose"].min() < 60:
-        st.error("Hypoglycemia risk detected")
-
-# ======================================================
-# CLINICAL AI ENGINE (IMPORTANT PART)
-# ======================================================
-elif menu == "Clinical AI Engine":
-
-    st.subheader("🧠 Clinical Question Engine")
-
-    question = st.selectbox(
-        "Ask Clinical AI",
-        [
-            "What is Time in Range meaning?",
-            "Is patient high risk?",
-            "What causes glucose spikes?",
-            "Insulin effectiveness?",
-            "Meal impact on glucose?",
-            "Sleep impact on stability?",
-            "Exercise effect on glucose?"
-        ]
-    )
-
-    if question == "What is Time in Range meaning?":
-        st.info("TIR = % of glucose readings between 70–180 mg/dL")
-
-    elif question == "Is patient high risk?":
-        if tir < 60:
-            st.error("High risk patient detected")
-        else:
-            st.success("Stable risk profile")
-
-    elif question == "What causes glucose spikes?":
-        st.info("Carbohydrate intake, low activity, and insulin delay")
-
-    elif question == "Insulin effectiveness?":
-        st.info("Measured using glucose reduction rate and stability improvement")
-
-    elif question == "Meal impact on glucose?":
-        st.info("High carb meals cause sharp post-meal glucose spikes")
-
-    elif question == "Sleep impact on stability?":
-        st.info("Poor sleep increases glucose variability")
-
-    elif question == "Exercise effect on glucose?":
-        st.info("Exercise reduces glucose levels and improves insulin sensitivity")
-
-# ======================================================
-# FOOTER INSIGHTS
-# ======================================================
-st.markdown("---")
-
-st.subheader("📌 Clinical Summary")
-
-st.info(f"""
-✔ Average Glucose: {avg_glucose:.1f} mg/dL  
-✔ Time in Range: {tir:.1f}%  
-
-👉 Overall Interpretation:
-{'Stable metabolic control' if tir > 70 else 'Unstable glucose regulation detected'}
-""")
+    st.markdown("""
+    <div class='insight'>
+    <b>AI Insight:</b><br><br>
+    ✔ High glucose → adjust insulin strategy<br>
+    ✔ Variability → monitor diet & activity<br>
+    ✔ Stable range → continue current plan
+    </div>
+    """, unsafe_allow_html=True)
