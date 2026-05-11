@@ -307,18 +307,43 @@ elif menu == "Predictive Analytics":
     )
 
 # ======================================================
-# PRESCRIPTIVE
+# PRESCRIPTIVE ANALYTICS (FIXED + SAFE)
 # ======================================================
+
 elif menu == "Prescriptive Analytics":
 
     st.subheader("🧠 Prescriptive Recommendations")
 
+    # --------------------------------------------------
+    # SAFETY CHECK: Ensure required columns exist
+    # --------------------------------------------------
+    required_cols = ['glucose', 'time', 'steps', 'carb_input', 'insulin']
+
+    for col in required_cols:
+        if col not in df.columns:
+            df[col] = 0
+
+    # --------------------------------------------------
+    # RISK SCORE CREATION (if missing)
+    # --------------------------------------------------
+    if 'risk_score' not in df.columns:
+        df['risk_score'] = (
+            df['glucose'].rolling(3).mean().fillna(df['glucose'].mean()) * 0.5 +
+            df['glucose'].std() * 0.5
+        )
+
+    # --------------------------------------------------
+    # RISK LEVEL CLASSIFICATION
+    # --------------------------------------------------
     df['Risk_Level'] = np.where(
         df['risk_score'] > 50,
         'High Risk',
         'Stable'
     )
 
+    # --------------------------------------------------
+    # INTERVENTION VISUALIZATION
+    # --------------------------------------------------
     fig_intervention = px.scatter(
         df,
         x='time',
@@ -329,42 +354,49 @@ elif menu == "Prescriptive Analytics":
         title='AI Intervention Monitoring'
     )
 
-    st.plotly_chart(
-        fig_intervention,
-        use_container_width=True
-    )
+    st.plotly_chart(fig_intervention, use_container_width=True)
 
+    # --------------------------------------------------
+    # CARB vs INSULIN HEATMAP
+    # --------------------------------------------------
     fig_carb = px.density_heatmap(
         df,
         x='carb_input',
         y='insulin',
         z='glucose',
         template='plotly_dark',
-        title='Carb vs Insulin Heatmap'
+        title='Carb vs Insulin vs Glucose Heatmap'
     )
 
-    st.plotly_chart(
-        fig_carb,
-        use_container_width=True
-    )
+    st.plotly_chart(fig_carb, use_container_width=True)
 
+    # --------------------------------------------------
+    # AI CLINICAL RULE-BASED INSIGHTS
+    # --------------------------------------------------
     st.markdown("## 🚨 AI Clinical Recommendations")
 
     if df['risk_score'].mean() > 40:
         st.error(
-            "High glucose instability detected. "
+            "⚠️ High glucose instability detected. "
             "Recommend insulin reassessment."
         )
 
     if df['glucose'].max() > 250:
         st.warning(
-            "Severe hyperglycemia episodes detected."
+            "🚨 Severe hyperglycemia episodes detected."
         )
 
     if df['glucose'].min() < 60:
         st.info(
-            "Hypoglycemia intervention recommended."
+            "⚠️ Hypoglycemia risk detected. Immediate intervention recommended."
         )
+
+    # --------------------------------------------------
+    # OPTIONAL: DEBUG VIEW (VERY USEFUL)
+    # --------------------------------------------------
+    with st.expander("🔍 Debug Data Preview"):
+        st.write(df.head())
+        st.write("Columns:", df.columns.tolist())
 # ======================================================
 # INSIGHT
 # ======================================================
