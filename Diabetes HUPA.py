@@ -21,9 +21,9 @@ st.set_page_config(
 def load_data():
 
     # ✔ YOUR FILES
-    demo = pd.read_csv("cleaned_demographics(1).csv")
+    demo = pd.read_csv("cleaned_demographics.csv")
     df = pd.read_excel(
-        "cleaned_hupa_diabetes_recent(1).xlsb",
+        "cleaned_hupa_diabetes_recent.xlsb",
         engine="pyxlsb"
     )
 
