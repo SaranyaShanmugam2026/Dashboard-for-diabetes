@@ -1,6 +1,6 @@
 # app.py
 # ===========================
-# GLUCOAI - ADVANCED VERSION
+# GLUCOSE INTELLIGENCE PLATFORM (CLEAN VERSION)
 # ===========================
 
 import streamlit as st
@@ -12,33 +12,31 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, roc_auc_score
 
 # ===========================
-# CONFIG
+# PAGE CONFIG
 # ===========================
 
 st.set_page_config(
-    page_title="GlucoAI Advanced Platform",
+    page_title="Glucose Intelligence Platform",
     page_icon="🩺",
     layout="wide"
 )
 
 # ===========================
-# NAVIGATION MENU
+# CLEAN HEADER
 # ===========================
 
-menu = st.sidebar.radio(
-    "📌 Navigation",
-    [
-        "🏠 Home",
-        "🧹 Data Cleaning",
-        "📊 Exploration",
-        "🍽️ Meals & Insulin",
-        "🏃 Activity",
-        "🌙 Night Risk",
-        "🤖 AI Prediction",
-        "💊 Prescriptive AI",
-        "📥 Export Data"
-    ]
-)
+st.markdown("""
+<div style="
+background:linear-gradient(90deg,#0f766e,#2563eb);
+padding:25px;
+border-radius:20px;
+color:white;
+text-align:center;
+margin-bottom:20px;">
+<h1>🩺 Glucose Intelligence Platform</h1>
+<p>Clinical Decision Support System for Continuous Glucose Monitoring, Insulin, Meals & Activity Analysis</p>
+</div>
+""", unsafe_allow_html=True)
 
 # ===========================
 # LOAD DATA
@@ -57,30 +55,17 @@ def load_data():
 df = load_data()
 
 # ===========================
-# BASIC CLEANING PIPELINE (LIVE VIEW)
+# CLEANING PIPELINE
 # ===========================
 
-def clean_data(df):
+df = df.dropna(subset=["glucose", "time", "patient_id"])
+df = df.sort_values(["patient_id", "time"])
 
-    df = df.dropna(subset=["glucose", "time", "patient_id"])
-    df = df.sort_values(["patient_id", "time"])
+df["glucose"] = df.groupby("patient_id")["glucose"].transform(
+    lambda x: x.interpolate(limit=2)
+)
 
-    df["glucose"] = pd.to_numeric(df["glucose"], errors="coerce")
-    df["heart_rate"] = pd.to_numeric(df.get("heart_rate", 0), errors="coerce")
-
-    df["glucose"] = df.groupby("patient_id")["glucose"].transform(
-        lambda x: x.interpolate(limit=2)
-    )
-
-    df["glucose"] = df["glucose"].clip(40, 500)
-
-    return df
-
-df = clean_data(df)
-
-# ===========================
-# FEATURE ENGINEERING
-# ===========================
+df["glucose"] = df["glucose"].clip(40, 500)
 
 df["hour"] = df["time"].dt.hour
 df["is_night"] = df["hour"].between(0, 6).astype(int)
@@ -96,119 +81,139 @@ df["rolling_mean"] = (
 df["is_in_range"] = df["glucose"].between(70, 180).astype(int)
 
 # ===========================
+# NAVIGATION MENU (CLICKABLE LINKS)
+# ===========================
+
+st.markdown("### 📌 Navigation")
+
+nav = st.columns(6)
+
+page = None
+
+with nav[0]:
+    if st.button("Home"):
+        page = "home"
+
+with nav[1]:
+    if st.button("Cleaning"):
+        page = "cleaning"
+
+with nav[2]:
+    if st.button("Exploration"):
+        page = "exploration"
+
+with nav[3]:
+    if st.button("Meals"):
+        page = "meals"
+
+with nav[4]:
+    if st.button("Activity"):
+        page = "activity"
+
+with nav[5]:
+    if st.button("Model"):
+        page = "model"
+
+# default page
+if page is None:
+    page = "home"
+
+st.markdown("---")
+
+# ===========================
 # HOME
 # ===========================
 
-if menu == "🏠 Home":
+if page == "home":
 
-    st.title("🩺 GlucoAI Advanced Clinical Intelligence Platform")
+    st.subheader("Clinical Overview")
 
-    st.markdown("""
-    ### 🚀 System Overview
-    - CGM + Insulin + Activity + Sleep + Demographics
-    - Real-time glucose intelligence
-    - Predictive + Prescriptive AI engine
-    - Clinical decision support system
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Patients", df["patient_id"].nunique())
+    col2.metric("Records", len(df))
+    col3.metric("Avg Glucose", round(df["glucose"].mean(), 1))
+
+    st.info("""
+    This system integrates glucose monitoring, insulin delivery, meal intake, and activity data
+    to support clinical decision-making and patient monitoring.
     """)
 
-    st.success("Ready for clinical AI decision-making 🚀")
-
 # ===========================
-# DATA CLEANING PAGE (IMPORTANT ADDITION)
+# DATA CLEANING
 # ===========================
 
-elif menu == "🧹 Data Cleaning":
+elif page == "cleaning":
 
-    st.title("🧹 Data Cleaning Pipeline Dashboard")
+    st.subheader("Data Cleaning Overview")
 
-    st.write("### Missing Values")
+    st.write("Missing Values")
     st.dataframe(df.isnull().sum())
 
-    st.write("### Duplicate Check")
+    st.write("Duplicate Records")
     st.write(df.duplicated().sum())
 
-    st.write("### Glucose Distribution After Cleaning")
-    fig = px.histogram(df, x="glucose", nbins=50)
+    fig = px.histogram(df, x="glucose", nbins=40, title="Glucose Distribution")
     st.plotly_chart(fig, use_container_width=True)
 
-    st.write("### Outlier View")
-    fig = px.box(df, y="glucose")
-    st.plotly_chart(fig, use_container_width=True)
-
-    st.success("Data is cleaned and ready for AI modeling")
+    fig2 = px.box(df, y="glucose", title="Outlier Detection")
+    st.plotly_chart(fig2, use_container_width=True)
 
 # ===========================
 # EXPLORATION
 # ===========================
 
-elif menu == "📊 Exploration":
+elif page == "exploration":
 
-    st.title("📊 Clinical Data Exploration")
+    st.subheader("Patient-Level Analysis")
 
     patient = st.selectbox("Select Patient", df["patient_id"].unique())
 
     temp = df[df["patient_id"] == patient]
 
-    fig = px.line(temp, x="time", y="glucose")
+    fig = px.line(temp, x="time", y="glucose", title="Glucose Trend")
     st.plotly_chart(fig, use_container_width=True)
 
     col1, col2 = st.columns(2)
 
-    with col1:
-        st.metric("Avg Glucose", round(temp["glucose"].mean(), 2))
-
-    with col2:
-        st.metric("TIR", round(temp["is_in_range"].mean()*100, 2))
+    col1.metric("Avg Glucose", round(temp["glucose"].mean(), 2))
+    col2.metric("Time in Range", round(temp["is_in_range"].mean()*100, 2))
 
 # ===========================
 # MEALS
 # ===========================
 
-elif menu == "🍽️ Meals & Insulin":
+elif page == "meals":
 
-    st.title("🍽️ Meal Impact Analysis")
+    st.subheader("Meal Impact Analysis")
 
-    df_meal = df[df["carb_input"] > 0].copy()
+    meal = df[df["carb_input"] > 0].copy()
 
-    df_meal["spike"] = df_meal.groupby("patient_id")["glucose"].shift(-12) - df_meal["glucose"]
+    meal["spike"] = meal.groupby("patient_id")["glucose"].shift(-12) - meal["glucose"]
 
-    fig = px.scatter(df_meal, x="carb_input", y="spike")
+    fig = px.scatter(meal, x="carb_input", y="spike", title="Carbs vs Glucose Spike")
     st.plotly_chart(fig, use_container_width=True)
 
 # ===========================
 # ACTIVITY
 # ===========================
 
-elif menu == "🏃 Activity":
+elif page == "activity":
 
-    st.title("🏃 Activity vs Glucose Stability")
+    st.subheader("Activity vs Glucose Stability")
 
-    fig = px.scatter(df, x="steps", y="glucose")
+    fig = px.scatter(df, x="steps", y="glucose", title="Steps vs Glucose")
     st.plotly_chart(fig, use_container_width=True)
 
 # ===========================
-# NIGHT RISK
+# MODEL
 # ===========================
 
-elif menu == "🌙 Night Risk":
+elif page == "model":
 
-    st.title("🌙 Nocturnal Hypoglycemia Risk")
-
-    night = df[df["is_night"] == 1]
-
-    fig = px.histogram(night, x="glucose", color="is_in_range")
-    st.plotly_chart(fig, use_container_width=True)
-
-# ===========================
-# AI MODEL
-# ===========================
-
-elif menu == "🤖 AI Prediction":
-
-    st.title("🤖 Hypoglycemia Prediction Model")
+    st.subheader("Hypoglycemia Prediction Model")
 
     model_df = df.copy()
-
     model_df["target"] = (model_df["glucose"].shift(-6) < 70).astype(int)
 
     features = ["glucose", "glucose_roc", "hour"]
@@ -224,38 +229,15 @@ elif menu == "🤖 AI Prediction":
     model.fit(X_train, y_train)
 
     pred = model.predict(X_test)
-    prob = model.predict_proba(X_test)[:,1]
+    prob = model.predict_proba(X_test)[:, 1]
 
-    st.metric("Accuracy", accuracy_score(y_test, pred))
-    st.metric("ROC-AUC", roc_auc_score(y_test, prob))
+    st.metric("Accuracy", round(accuracy_score(y_test, pred), 3))
+    st.metric("ROC-AUC", round(roc_auc_score(y_test, prob), 3))
 
-# ===========================
-# PRESCRIPTIVE AI
-# ===========================
+    importance = pd.DataFrame({
+        "Feature": features,
+        "Importance": model.feature_importances_
+    })
 
-elif menu == "💊 Prescriptive AI":
-
-    st.title("💊 Clinical Recommendation Engine")
-
-    df["risk_score"] = (
-        df["glucose"].rolling(12).mean() > 180
-    ).astype(int)
-
-    st.dataframe(df.groupby("patient_id")["risk_score"].mean())
-
-# ===========================
-# EXPORT
-# ===========================
-
-elif menu == "📥 Export Data":
-
-    st.title("📥 Export Clean Dataset")
-
-    csv = df.to_csv(index=False).encode("utf-8")
-
-    st.download_button(
-        "Download Clean Dataset",
-        csv,
-        "glucoai_clean.csv",
-        "text/csv"
-    )
+    fig = px.bar(importance, x="Importance", y="Feature", orientation="h")
+    st.plotly_chart(fig, use_container_width=True)
