@@ -7,3 +7,6 @@ scipy
 statsmodels
 openpyxl
 pyxlsb
+xgboost
+plotly-express
+shap
