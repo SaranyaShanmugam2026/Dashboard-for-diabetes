@@ -8,13 +8,13 @@ import plotly.graph_objects as go
 # PAGE CONFIG
 # ======================================================
 st.set_page_config(
-    page_title="AI Diabetes Intelligence System",
+    page_title="AI Clinical Diabetes Intelligence System",
     page_icon="🩺",
     layout="wide"
 )
 
 # ======================================================
-# UI THEME
+# UI THEME (CLEAN + MODERN)
 # ======================================================
 st.markdown("""
 <style>
@@ -23,7 +23,7 @@ st.markdown("""
     background: linear-gradient(135deg, #050B18, #0A1F3D, #0D2A52);
 }
 
-html, body, [class*="css"]  {
+html, body, [class*="css"] {
     font-family: 'Segoe UI', sans-serif;
     color: white;
 }
@@ -56,7 +56,7 @@ h1, h2, h3 {
 """, unsafe_allow_html=True)
 
 # ======================================================
-# LOAD DATA (CLEAN + SAFE)
+# LOAD DATA
 # ======================================================
 @st.cache_data
 def load_data():
@@ -67,22 +67,16 @@ def load_data():
         engine="pyxlsb"
     )
 
-    # merge
     if "patient_id" in demo.columns and "patient_id" in df.columns:
         df = df.merge(demo, on="patient_id", how="left")
 
-    # clean time
-    if "time" in df.columns:
-        df["time"] = pd.to_datetime(df["time"], errors="coerce")
-        df = df.dropna(subset=["time"])
-        df = df.sort_values("time")
+    df["time"] = pd.to_datetime(df["time"], errors="coerce")
+    df = df.dropna(subset=["time"]).sort_values("time")
 
-    # clean numeric safely
     for col in ["glucose", "heart_rate", "steps"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # features
     if "glucose" in df.columns:
         df["glucose_roc"] = df["glucose"].diff()
         df["glucose_rolling_std"] = df["glucose"].rolling(12).std().fillna(0)
@@ -116,23 +110,18 @@ if "patient_id" in df.columns:
 st.title("🩺 AI Clinical Diabetes Intelligence System")
 
 # ======================================================
-# SAFE KPI FIX (MAIN ISSUE FIXED HERE)
+# KPI ENGINE (FIXED + SAFE)
 # ======================================================
 if "glucose" in df.columns and len(df) > 0:
+    d = df.dropna(subset=["glucose"])
 
-    df_clean = df.dropna(subset=["glucose"])
-
-    if len(df_clean) > 0:
-        avg = float(df_clean["glucose"].mean())
-        mx = float(df_clean["glucose"].max())
-        mn = float(df_clean["glucose"].min())
-        tir = float(df_clean["glucose"].between(70, 180).mean() * 100)
-    else:
-        avg = mx = mn = tir = 0
+    avg = d["glucose"].mean()
+    mx = d["glucose"].max()
+    mn = d["glucose"].min()
+    tir = d["glucose"].between(70, 180).mean() * 100
 else:
     avg = mx = mn = tir = 0
 
-# KPIs
 c1, c2, c3, c4 = st.columns(4)
 
 c1.markdown(f"<div class='kpi'><div class='kpi-title'>Avg Glucose</div><div class='kpi-value'>{avg:.1f}</div></div>", unsafe_allow_html=True)
@@ -143,11 +132,11 @@ c4.markdown(f"<div class='kpi'><div class='kpi-title'>Time in Range</div><div cl
 st.markdown("---")
 
 # ======================================================
-# OVERVIEW (BETTER EXPLANATION GRAPH)
+# OVERVIEW (CLINICAL INTELLIGENCE VIEW)
 # ======================================================
 if menu == "Overview":
 
-    st.subheader("📊 Clinical Glucose Timeline (Risk Zones)")
+    st.subheader("📊 Glucose Clinical Timeline")
 
     fig = go.Figure()
 
@@ -156,7 +145,7 @@ if menu == "Overview":
         y=df["glucose"],
         mode="lines",
         name="Glucose",
-        line=dict(color="#4FC3F7", width=2)
+        line=dict(color="#4FC3F7")
     ))
 
     fig.add_hrect(y0=70, y1=180, fillcolor="green", opacity=0.1)
@@ -167,10 +156,10 @@ if menu == "Overview":
 
     st.info("""
     🧠 Interpretation:
-    - Green zone = safe range
-    - Red line = hypoglycemia risk
-    - Orange line = hyperglycemia risk
-    - Spikes = insulin/meal imbalance signals
+    • Green zone = safe glucose range  
+    • Red line = hypoglycemia risk  
+    • Orange line = hyperglycemia risk  
+    • Spikes indicate insulin or meal imbalance
     """)
 
 # ======================================================
@@ -189,7 +178,7 @@ elif menu == "Descriptive Analytics":
 
     with col2:
         pie_df = pd.DataFrame({
-            "Type": ["Low (<70)", "Normal (70-180)", "High (>180)"],
+            "Type": ["Low", "In Range", "High"],
             "Count": [
                 (df["glucose"] < 70).sum(),
                 df["glucose"].between(70, 180).sum(),
@@ -199,6 +188,7 @@ elif menu == "Descriptive Analytics":
 
         fig2 = px.pie(pie_df, names="Type", values="Count",
                       title="Time in Range Breakdown")
+
         st.plotly_chart(fig2, use_container_width=True)
 
     fig3 = px.line(df, x="time", y="glucose_rolling_std",
@@ -206,14 +196,14 @@ elif menu == "Descriptive Analytics":
     st.plotly_chart(fig3, use_container_width=True)
 
     st.info("""
-    📌 Insights:
-    - High variability = unstable diabetes control
-    - Pie chart shows risk distribution
-    - Histogram shows glucose spread
+    📌 Clinical Insight:
+    • High variability = unstable diabetes  
+    • Pie chart = risk distribution  
+    • Histogram = glucose spread
     """)
 
 # ======================================================
-# PREDICTIVE
+# PREDICTIVE ANALYTICS
 # ======================================================
 elif menu == "Predictive Analytics":
 
@@ -232,7 +222,7 @@ elif menu == "Predictive Analytics":
     st.success("Higher score = higher risk of glucose instability")
 
 # ======================================================
-# PRESCRIPTIVE
+# PRESCRIPTIVE ANALYTICS
 # ======================================================
 elif menu == "Prescriptive Analytics":
 
@@ -247,7 +237,7 @@ elif menu == "Prescriptive Analytics":
 
     st.info("""
     AI Recommendations:
-    - Optimize insulin timing
-    - Reduce late-night carbs
-    - Increase physical activity
+    • Optimize insulin timing  
+    • Reduce late-night carbs  
+    • Maintain activity consistency  
     """)
