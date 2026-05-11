@@ -61,9 +61,9 @@ h1, h2, h3 {
 @st.cache_data
 def load_data():
 
-    demo = pd.read_csv("cleaned_demographics(1).csv")
+    demo = pd.read_csv("cleaned_demographics.csv")
     df = pd.read_excel(
-        "cleaned_hupa_diabetes_recent(1).xlsb",
+        "cleaned_hupa_diabetes_recent.xlsb",
         engine="pyxlsb"
     )
 
