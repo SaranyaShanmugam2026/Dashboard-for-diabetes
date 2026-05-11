@@ -18,7 +18,6 @@ st.set_page_config(
 # ======================================================
 st.markdown("""
 <style>
-
 .main {
     background: linear-gradient(135deg, #050B18, #0A1F3D, #0D2A52);
 }
@@ -33,24 +32,12 @@ h1, h2, h3 {
     font-weight: 700;
 }
 
-.kpi {
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.15);
-    padding: 16px;
-    border-radius: 16px;
-    text-align: center;
-}
-
-.kpi-title { font-size: 13px; color: #B8D7FF; }
-.kpi-value { font-size: 26px; font-weight: bold; color: white; }
-
 .insight-box {
     background: rgba(255,255,255,0.08);
     padding: 18px;
     border-radius: 16px;
     border-left: 5px solid #4FC3F7;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -59,7 +46,6 @@ h1, h2, h3 {
 # ======================================================
 @st.cache_data
 def load_data():
-
     demo = pd.read_csv("cleaned_demographics.csv")
     df = pd.read_excel("cleaned_hupa_diabetes_recent.xlsb", engine="pyxlsb")
 
@@ -73,8 +59,9 @@ def load_data():
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
+    # Feature engineering
     df["glucose_roc"] = df["glucose"].diff()
-    df["glucose_rolling_std"] = df["glucose"].rolling(12).std().fillna(0)
+    df["glucose_rolling_std"] = df["glucose"].rolling(12, min_periods=1).std()
 
     return df
 
@@ -103,302 +90,213 @@ if patient != "All Patients":
 st.title("🩺 AI Clinical Diabetes Intelligence System")
 
 # ======================================================
-# KPI 
+# KPI
 # ======================================================
 col1, col2, col3, col4 = st.columns(4)
 
-tir = ((df['glucose'].between(70,180)).mean()) * 100
+tir = ((df['glucose'].between(70, 180)).mean()) * 100
 
 with col1:
-    st.metric(
-        "Average Glucose",
-        f"{round(df['glucose'].mean(),1)} mg/dL"
-    )
+    st.metric("Average Glucose", f"{round(df['glucose'].mean(), 1)} mg/dL")
 
 with col2:
-    st.metric(
-        "Time In Range",
-        f"{round(tir,1)}%"
-    )
+    st.metric("Time In Range", f"{round(tir, 1)}%")
 
 with col3:
-    st.metric(
-        "Average Heart Rate",
-        f"{round(df['heart_rate'].mean(),1)} bpm"
-    )
+    st.metric("Average Heart Rate", f"{round(df['heart_rate'].mean(), 1)} bpm")
 
 with col4:
-    st.metric(
-        "Average Steps",
-        f"{int(df['steps'].mean())}"
+    st.metric("Average Steps", f"{int(df['steps'].mean())}")
+
+# ======================================================
+# OVERVIEW
+# ======================================================
+if menu == "Dataset Overview":
+
+    st.subheader("📘 Glucose Trend (Clinical View)")
+
+    df["glucose_smooth"] = df["glucose"].rolling(12, min_periods=1).mean()
+
+    fig_glucose = go.Figure()
+
+    fig_glucose.add_trace(go.Scatter(
+        x=df["time"],
+        y=df["glucose"],
+        mode="lines",
+        name="Raw",
+        line=dict(width=1, color="rgba(255,255,255,0.3)")
+    ))
+
+    fig_glucose.add_trace(go.Scatter(
+        x=df["time"],
+        y=df["glucose_smooth"],
+        mode="lines",
+        name="Smoothed",
+        line=dict(width=3, color="#4FC3F7")
+    ))
+
+    fig_glucose.add_hline(y=70, line_dash="dash", line_color="red")
+    fig_glucose.add_hline(y=180, line_dash="dash", line_color="orange")
+
+    fig_glucose.update_layout(
+        template="plotly_dark",
+        height=400,
+        hovermode="x unified"
     )
 
+    st.plotly_chart(fig_glucose, use_container_width=True)
 
-# ======================================================
-# OVERVIEW (SMART VISUAL)
-# ======================================================
-if menu == "Overview":
+    # Distribution
+    st.subheader("📊 Glucose Distribution")
 
-    st.subheader("📘 Dataset Overview")
+    fig_hist = go.Figure()
+    fig_hist.add_trace(go.Histogram(
+        x=df["glucose"],
+        nbinsx=40,
+        marker_color="#4FC3F7"
+    ))
 
-    col1, col2 = st.columns(2)
+    fig_hist.update_layout(template="plotly_dark", height=350)
 
-    with col1:
+    st.plotly_chart(fig_hist, use_container_width=True)
 
-        fig_glucose = px.line(
-            df,
-            x='time',
-            y='glucose',
-            color='patient_id',
-            template='plotly_dark',
-            title='Glucose Trends'
-        )
-
-        fig_glucose.add_hline(
-            y=70,
-            line_dash='dash',
-            line_color='red'
-        )
-
-        fig_glucose.add_hline(
-            y=180,
-            line_dash='dash',
-            line_color='orange'
-        )
-
-        st.plotly_chart(
-            fig_glucose,
-            use_container_width=True
-        )
-
-    with col2:
-
-        fig_hist = px.histogram(
-            df,
-            x='glucose',
-            nbins=30,
-            color='patient_id',
-            template='plotly_dark',
-            title='Glucose Distribution'
-        )
-
-        st.plotly_chart(
-            fig_hist,
-            use_container_width=True
-        )
+    # Activity
+    st.subheader("🚶 Physical Activity Trend")
 
     fig_steps = px.area(
         df,
-        x='time',
-        y='steps',
-        template='plotly_dark',
-        title='Daily Physical Activity'
+        x="time",
+        y="steps",
+        template="plotly_dark"
     )
 
-    st.plotly_chart(
-        fig_steps,
-        use_container_width=True
-    )
-
+    st.plotly_chart(fig_steps, use_container_width=True)
 
 # ======================================================
-# DESCRIPTIVE (IMPROVED)
+# DESCRIPTIVE
 # ======================================================
 elif menu == "Descriptive Analytics":
 
-    st.subheader("📊 Descriptive Analytics")
+    st.subheader("📊 Heart Rate vs Glucose")
 
-    col1, col2 = st.columns(2)
+    fig_hr = px.scatter(
+        df,
+        x="heart_rate",
+        y="glucose",
+        color="glucose",
+        trendline="lowess",
+        template="plotly_dark",
+        color_continuous_scale="RdYlBu_r"
+    )
 
-    with col1:
+    st.plotly_chart(fig_hr, use_container_width=True)
 
-        fig_hr = px.scatter(
-            df,
-            x='heart_rate',
-            y='glucose',
-            color='steps',
-            size='calories',
-            template='plotly_dark',
-            title='Heart Rate vs Glucose'
-        )
+    st.subheader("📦 Hourly Glucose Pattern")
 
-        st.plotly_chart(
-            fig_hr,
-            use_container_width=True
-        )
+    fig_hour = px.box(
+        df,
+        x="hour",
+        y="glucose",
+        points="all",
+        template="plotly_dark"
+    )
 
-    with col2:
+    st.plotly_chart(fig_hour, use_container_width=True)
 
-        fig_sleep = px.box(
-            df,
-            x='hour',
-            y='glucose',
-            color='hour',
-            template='plotly_dark',
-            title='Hourly Glucose Pattern'
-        )
-
-        st.plotly_chart(
-            fig_sleep,
-            use_container_width=True
-        )
-
-    corr = df[
-        [
-            'glucose',
-            'heart_rate',
-            'steps',
-            'calories',
-            'sleep_hours'
-        ]
-    ].corr()
+    corr = df[["glucose", "heart_rate", "steps", "calories"]].corr()
 
     fig_corr = px.imshow(
         corr,
         text_auto=True,
-        template='plotly_dark',
-        title='Feature Correlation Matrix'
+        template="plotly_dark"
     )
 
-    st.plotly_chart(
-        fig_corr,
-        use_container_width=True
-    )
+    st.plotly_chart(fig_corr, use_container_width=True)
 
 # ======================================================
-# PREDICTIVE (FIXED)
+# PRESCRIPTIVE
+# ======================================================
+elif menu == "Prescriptive Analytics":
+
+    st.subheader("🧠 Clinical Risk Monitoring")
+
+    df["risk_score"] = df.get("risk_score", df["glucose"].rolling(3).mean())
+
+    df["Risk_Level"] = np.where(df["risk_score"] > 50, "High Risk", "Stable")
+
+    fig = px.scatter(
+        df,
+        x="time",
+        y="glucose",
+        color="Risk_Level",
+        size="steps",
+        template="plotly_dark"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.subheader("🚨 AI Recommendations")
+
+    if df["risk_score"].mean() > 40:
+        st.error("High instability detected → adjust insulin strategy")
+
+    if df["glucose"].max() > 250:
+        st.warning("Severe hyperglycemia detected")
+
+    if df["glucose"].min() < 60:
+        st.info("Hypoglycemia risk detected")
+# ======================================================
+# PREDICTIVE
 # ======================================================
 elif menu == "Predictive Analytics":
 
-    st.subheader("🤖 Predictive Analytics")
+    st.subheader("🤖 Risk Prediction")
 
-    df['risk_score'] = (
-        abs(df['glucose_roc']) * 0.4 +
-        abs(df['glucose_rolling_std']) * 0.4 +
-        abs(df['heart_rate']) * 0.2
+    df["risk_score"] = (
+        abs(df["glucose_roc"]) * 0.4 +
+        df["glucose_rolling_std"] * 0.4 +
+        abs(df["heart_rate"]) * 0.2
     )
 
-    fig_risk = px.line(
-        df,
-        x='time',
-        y='risk_score',
-        template='plotly_dark',
-        title='Hypoglycemia Risk Prediction'
-    )
+    df["risk_smooth"] = df["risk_score"].rolling(10, min_periods=1).mean()
 
-    st.plotly_chart(
-        fig_risk,
-        use_container_width=True
-    )
+    fig_risk = go.Figure()
+
+    fig_risk.add_trace(go.Scatter(
+        x=df["time"],
+        y=df["risk_score"],
+        line=dict(width=1, color="rgba(255,0,0,0.3)"),
+        name="Raw"
+    ))
+
+    fig_risk.add_trace(go.Scatter(
+        x=df["time"],
+        y=df["risk_smooth"],
+        line=dict(width=3, color="#FF5252"),
+        name="Smoothed"
+    ))
+
+    fig_risk.update_layout(template="plotly_dark", height=400)
+
+    st.plotly_chart(fig_risk, use_container_width=True)
+
+    st.subheader("📉 Variability vs Glucose")
 
     fig_pred = px.scatter(
         df,
-        x='glucose_rolling_std',
-        y='glucose',
-        size='steps',
-        color='risk_score',
-        template='plotly_dark',
-        title='Glucose Variability Prediction'
+        x="glucose_rolling_std",
+        y="glucose",
+        color="risk_score",
+        template="plotly_dark",
+        color_continuous_scale="Viridis"
     )
 
-    st.plotly_chart(
-        fig_pred,
-        use_container_width=True
-    )
+    st.plotly_chart(fig_pred, use_container_width=True)
+
+
 
 # ======================================================
-# PRESCRIPTIVE ANALYTICS (FIXED + SAFE)
-# ======================================================
-
-elif menu == "Prescriptive Analytics":
-
-    st.subheader("🧠 Prescriptive Recommendations")
-
-    # --------------------------------------------------
-    # SAFETY CHECK: Ensure required columns exist
-    # --------------------------------------------------
-    required_cols = ['glucose', 'time', 'steps', 'carb_input', 'insulin']
-
-    for col in required_cols:
-        if col not in df.columns:
-            df[col] = 0
-
-    # --------------------------------------------------
-    # RISK SCORE CREATION (if missing)
-    # --------------------------------------------------
-    if 'risk_score' not in df.columns:
-        df['risk_score'] = (
-            df['glucose'].rolling(3).mean().fillna(df['glucose'].mean()) * 0.5 +
-            df['glucose'].std() * 0.5
-        )
-
-    # --------------------------------------------------
-    # RISK LEVEL CLASSIFICATION
-    # --------------------------------------------------
-    df['Risk_Level'] = np.where(
-        df['risk_score'] > 50,
-        'High Risk',
-        'Stable'
-    )
-
-    # --------------------------------------------------
-    # INTERVENTION VISUALIZATION
-    # --------------------------------------------------
-    fig_intervention = px.scatter(
-        df,
-        x='time',
-        y='glucose',
-        color='Risk_Level',
-        size='steps',
-        template='plotly_dark',
-        title='AI Intervention Monitoring'
-    )
-
-    st.plotly_chart(fig_intervention, use_container_width=True)
-
-    # --------------------------------------------------
-    # CARB vs INSULIN HEATMAP
-    # --------------------------------------------------
-    fig_carb = px.density_heatmap(
-        df,
-        x='carb_input',
-        y='insulin',
-        z='glucose',
-        template='plotly_dark',
-        title='Carb vs Insulin vs Glucose Heatmap'
-    )
-
-    st.plotly_chart(fig_carb, use_container_width=True)
-
-    # --------------------------------------------------
-    # AI CLINICAL RULE-BASED INSIGHTS
-    # --------------------------------------------------
-    st.markdown("## 🚨 AI Clinical Recommendations")
-
-    if df['risk_score'].mean() > 40:
-        st.error(
-            "⚠️ High glucose instability detected. "
-            "Recommend insulin reassessment."
-        )
-
-    if df['glucose'].max() > 250:
-        st.warning(
-            "🚨 Severe hyperglycemia episodes detected."
-        )
-
-    if df['glucose'].min() < 60:
-        st.info(
-            "⚠️ Hypoglycemia risk detected. Immediate intervention recommended."
-        )
-
-    # --------------------------------------------------
-    # OPTIONAL: DEBUG VIEW (VERY USEFUL)
-    # --------------------------------------------------
-    with st.expander("🔍 Debug Data Preview"):
-        st.write(df.head())
-        st.write("Columns:", df.columns.tolist())
-# ======================================================
-# INSIGHT
+# INSIGHTS
 # ======================================================
 st.markdown("---")
 
@@ -406,29 +304,14 @@ st.subheader("📌 Clinical Insights")
 
 st.markdown("""
 <div class='insight-box'>
+<b>Key Insights:</b><br><br>
 
-<b>Key AI Findings:</b><br><br>
-
-• High glucose variability predicts future instability.<br><br>
-
-• Physical activity improves insulin sensitivity.<br><br>
-
-• Large carbohydrate meals increase glucose spikes.<br><br>
-
-• Better sleep improves Time-In-Range.<br><br>
-
-• AI early-warning systems reduce hypoglycemia risk.
-
+• Smoothed glucose trends improve clinical interpretation<br>
+• Variability is a strong predictor of risk<br>
+• Physical activity stabilizes glucose response<br>
+• AI-based risk scoring enables early intervention<br>
 </div>
 """, unsafe_allow_html=True)
 
-# =========================================================
-# FOOTER
-# =========================================================
-
 st.markdown("---")
-
-st.caption(
-    "Developed using Streamlit + Plotly | "
-    "AI Diabetes Intelligence System"
-)
+st.caption("AI Clinical Diabetes Intelligence System | Streamlit + Plotly")
