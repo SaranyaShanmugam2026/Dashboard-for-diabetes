@@ -60,8 +60,8 @@ h1, h2, h3 {
 @st.cache_data
 def load_data():
 
-    demo = pd.read_csv("cleaned_demographics(1).csv")
-    df = pd.read_excel("cleaned_hupa_diabetes_recent(1).xlsb", engine="pyxlsb")
+    demo = pd.read_csv("cleaned_demographics.csv")
+    df = pd.read_excel("cleaned_hupa_diabetes_recent.xlsb", engine="pyxlsb")
 
     if "patient_id" in demo.columns and "patient_id" in df.columns:
         df = df.merge(demo, on="patient_id", how="left")
