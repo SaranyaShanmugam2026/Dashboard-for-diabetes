@@ -20,39 +20,29 @@ st.set_page_config(
 @st.cache_data
 def load_data():
 
+    # ✔ EXACT FILE NAMES FROM YOUR GITHUB
     demo = pd.read_csv("cleaned_demographics(1).csv")
+
     df = pd.read_excel(
         "cleaned_hupa_diabetes_recent(1).xlsb",
         engine="pyxlsb"
     )
 
-    # merge
+    # merge if possible
     if "patient_id" in demo.columns and "patient_id" in df.columns:
         df = df.merge(demo, on="patient_id", how="left")
 
-    # datetime
+    # datetime handling
     if "time" in df.columns:
         df["time"] = pd.to_datetime(df["time"])
         df = df.sort_values("time")
 
-    # safe defaults
+    # feature engineering
     if "glucose" in df.columns:
         df["glucose_roc"] = df["glucose"].diff()
         df["glucose_rolling_std"] = df["glucose"].rolling(12).std().fillna(0)
 
-    if "heart_rate" not in df.columns:
-        df["heart_rate"] = np.random.normal(75, 10, len(df))
-
-    if "steps" not in df.columns:
-        df["steps"] = np.random.randint(0, 8000, len(df))
-
-    if "carb_input" not in df.columns:
-        df["carb_input"] = np.random.randint(0, 100, len(df))
-
     return df
-
-
-df = load_data()
 
 # ======================================================
 # SIDEBAR
