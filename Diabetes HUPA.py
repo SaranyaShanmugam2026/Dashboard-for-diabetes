@@ -8,53 +8,62 @@ import plotly.graph_objects as go
 # PAGE CONFIG
 # ======================================================
 st.set_page_config(
-    page_title="AI Diabetes Intelligence Dashboard",
+    page_title="AI Diabetes Intelligence System",
     page_icon="🩺",
     layout="wide"
 )
 
 # ======================================================
-# UI STYLING (YOUR ATTRACTIVE DESIGN BACK)
+# GLOBAL UI THEME (NEW MODERN LOOK)
 # ======================================================
 st.markdown("""
 <style>
 
+/* BACKGROUND */
 .main {
-    background: linear-gradient(135deg, #081229, #0B1F3A);
+    background: linear-gradient(135deg, #050B18, #0A1F3D, #0D2A52);
 }
 
-h1, h2, h3 {
+/* FONT */
+html, body, [class*="css"]  {
+    font-family: 'Segoe UI', sans-serif;
     color: white;
 }
 
-/* KPI CARDS */
+/* HEADINGS */
+h1, h2, h3 {
+    color: #EAF3FF;
+    font-weight: 700;
+}
+
+/* KPI CARD */
 .kpi {
-    background: #EAF3FF;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
     padding: 16px;
-    border-radius: 18px;
+    border-radius: 16px;
     text-align: center;
-    box-shadow: 0px 6px 20px rgba(0,0,0,0.15);
+    backdrop-filter: blur(10px);
 }
 
 .kpi-title {
-    font-size: 14px;
-    color: #1B3B6F;
-    font-weight: 600;
+    font-size: 13px;
+    color: #B8D7FF;
 }
 
 .kpi-value {
-    font-size: 28px;
+    font-size: 26px;
     font-weight: bold;
-    color: #081229;
+    color: white;
 }
 
 /* INSIGHT BOX */
 .insight {
-    background: #EAF3FF;
+    background: rgba(255,255,255,0.08);
     padding: 18px;
-    border-radius: 18px;
-    border-left: 5px solid #1B4F8C;
-    color: #081229;
+    border-radius: 16px;
+    border-left: 5px solid #4FC3F7;
+    color: white;
 }
 
 </style>
@@ -89,20 +98,19 @@ df = load_data()
 # ======================================================
 # SIDEBAR
 # ======================================================
-st.sidebar.title("🧠 AI Clinical System")
+st.sidebar.title("🧠 Clinical AI System")
 
 menu = st.sidebar.radio(
     "Navigation",
     ["Overview", "Predictive Analytics", "Prescriptive Analytics"]
 )
 
-# patient filter
 if "patient_id" in df.columns:
-    patient_list = ["All Patients"] + list(df["patient_id"].dropna().unique())
+    patients = ["All Patients"] + list(df["patient_id"].dropna().unique())
 else:
-    patient_list = ["All Patients"]
+    patients = ["All Patients"]
 
-patient = st.sidebar.selectbox("Select Patient", patient_list)
+patient = st.sidebar.selectbox("Select Patient", patients)
 
 if patient != "All Patients":
     df = df[df["patient_id"] == patient]
@@ -110,66 +118,108 @@ if patient != "All Patients":
 # ======================================================
 # HEADER
 # ======================================================
-st.title("🩺 AI Diabetes Intelligence Dashboard")
+st.title("🩺 AI Clinical Diabetes Intelligence System")
 
 # ======================================================
-# KPIs (BEAUTIFUL CARDS)
+# KPIs
 # ======================================================
 avg = df["glucose"].mean()
 mx = df["glucose"].max()
 mn = df["glucose"].min()
-tir = df["glucose"].between(70, 180).mean() * 100
+tir = df["glucose"].between(70,180).mean()*100
 
-c1, c2, c3, c4 = st.columns(4)
+c1,c2,c3,c4 = st.columns(4)
 
-with c1:
-    st.markdown(f"<div class='kpi'><div class='kpi-title'>Avg Glucose</div><div class='kpi-value'>{avg:.1f}</div></div>", unsafe_allow_html=True)
-
-with c2:
-    st.markdown(f"<div class='kpi'><div class='kpi-title'>Max Glucose</div><div class='kpi-value'>{mx:.1f}</div></div>", unsafe_allow_html=True)
-
-with c3:
-    st.markdown(f"<div class='kpi'><div class='kpi-title'>Min Glucose</div><div class='kpi-value'>{mn:.1f}</div></div>", unsafe_allow_html=True)
-
-with c4:
-    st.markdown(f"<div class='kpi'><div class='kpi-title'>Time in Range</div><div class='kpi-value'>{tir:.1f}%</div></div>", unsafe_allow_html=True)
+c1.markdown(f"<div class='kpi'><div class='kpi-title'>Avg Glucose</div><div class='kpi-value'>{avg:.1f}</div></div>", unsafe_allow_html=True)
+c2.markdown(f"<div class='kpi'><div class='kpi-title'>Max Glucose</div><div class='kpi-value'>{mx:.1f}</div></div>", unsafe_allow_html=True)
+c3.markdown(f"<div class='kpi'><div class='kpi-title'>Min Glucose</div><div class='kpi-value'>{mn:.1f}</div></div>", unsafe_allow_html=True)
+c4.markdown(f"<div class='kpi'><div class='kpi-title'>Time in Range</div><div class='kpi-value'>{tir:.1f}%</div></div>", unsafe_allow_html=True)
 
 st.markdown("---")
 
 # ======================================================
-# OVERVIEW
+# OVERVIEW (IMPROVED EXPLAINABLE GRAPH)
 # ======================================================
 if menu == "Overview":
 
-    st.subheader("📊 Glucose Trends")
+    st.subheader("📊 Clinical Glucose Intelligence View")
 
-    fig = px.line(df, x="time", y="glucose", color="patient_id" if "patient_id" in df.columns else None)
-    fig.update_layout(template="plotly_dark")
+    # 🔥 SMART CLINICAL GRAPH (NOT JUST LINE CHART)
+    fig = go.Figure()
+
+    # glucose line
+    fig.add_trace(go.Scatter(
+        x=df["time"],
+        y=df["glucose"],
+        mode="lines",
+        name="Glucose Level",
+        line=dict(color="#4FC3F7", width=2)
+    ))
+
+    # safe range zone
+    fig.add_hrect(
+        y0=70, y1=180,
+        fillcolor="green",
+        opacity=0.1,
+        line_width=0
+    )
+
+    # hypoglycemia threshold
+    fig.add_hline(
+        y=70,
+        line_dash="dash",
+        line_color="red"
+    )
+
+    # hyperglycemia threshold
+    fig.add_hline(
+        y=180,
+        line_dash="dash",
+        line_color="orange"
+    )
+
+    fig.update_layout(
+        title="Glucose Pattern with Clinical Risk Zones",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font_color="white"
+    )
+
     st.plotly_chart(fig, use_container_width=True)
 
-    fig2 = px.pie(df, names=pd.cut(df["glucose"], bins=[0,70,180,400], labels=["Low","Normal","High"]))
-    st.plotly_chart(fig2, use_container_width=True)
+    # EXPLANATION
+    st.info("""
+    🧠 Clinical Interpretation:
+    • Blue line = glucose trend over time  
+    • Green zone = safe glucose range (70–180 mg/dL)  
+    • Red line = hypoglycemia risk  
+    • Orange line = hyperglycemia risk  
+
+    👉 This helps clinicians instantly identify instability patterns.
+    """)
 
 # ======================================================
 # PREDICTIVE
 # ======================================================
 elif menu == "Predictive Analytics":
 
-    st.subheader("🤖 Risk Prediction")
+    st.subheader("🤖 Risk Prediction Engine")
 
     df["risk"] = df["glucose_roc"].abs() + df["glucose_rolling_std"]
 
-    fig = px.line(df, x="time", y="risk", title="Risk Score Trend")
+    fig = px.line(df, x="time", y="risk", title="Glucose Instability Risk Score")
     fig.update_layout(template="plotly_dark")
 
     st.plotly_chart(fig, use_container_width=True)
+
+    st.info("Higher score = unstable glucose + higher clinical risk")
 
 # ======================================================
 # PRESCRIPTIVE
 # ======================================================
 elif menu == "Prescriptive Analytics":
 
-    st.subheader("🧠 Clinical Decisions")
+    st.subheader("🧠 Clinical Decision Support")
 
     df["risk_level"] = np.where(df["glucose"] > 180, "High Risk", "Stable")
 
@@ -178,11 +228,4 @@ elif menu == "Prescriptive Analytics":
 
     st.plotly_chart(fig, use_container_width=True)
 
-    st.markdown("""
-    <div class='insight'>
-    <b>AI Insight:</b><br><br>
-    ✔ High glucose → adjust insulin strategy<br>
-    ✔ Variability → monitor diet & activity<br>
-    ✔ Stable range → continue current plan
-    </div>
-    """, unsafe_allow_html=True)
+    st.success("AI suggests monitoring insulin response & meal timing closely")
