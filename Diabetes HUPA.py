@@ -14,29 +14,25 @@ st.set_page_config(
 )
 
 # ======================================================
-# GLOBAL UI THEME (NEW MODERN LOOK)
+# GLOBAL UI THEME (YOUR ORIGINAL - KEPT SAME)
 # ======================================================
 st.markdown("""
 <style>
 
-/* BACKGROUND */
 .main {
     background: linear-gradient(135deg, #050B18, #0A1F3D, #0D2A52);
 }
 
-/* FONT */
 html, body, [class*="css"]  {
     font-family: 'Segoe UI', sans-serif;
     color: white;
 }
 
-/* HEADINGS */
 h1, h2, h3 {
     color: #EAF3FF;
     font-weight: 700;
 }
 
-/* KPI CARD */
 .kpi {
     background: rgba(255,255,255,0.08);
     border: 1px solid rgba(255,255,255,0.15);
@@ -57,7 +53,6 @@ h1, h2, h3 {
     color: white;
 }
 
-/* INSIGHT BOX */
 .insight {
     background: rgba(255,255,255,0.08);
     padding: 18px;
@@ -70,7 +65,7 @@ h1, h2, h3 {
 """, unsafe_allow_html=True)
 
 # ======================================================
-# LOAD DATA
+# LOAD DATA (YOUR FILES - FIXED SAFE VERSION)
 # ======================================================
 @st.cache_data
 def load_data():
@@ -102,7 +97,7 @@ st.sidebar.title("🧠 Clinical AI System")
 
 menu = st.sidebar.radio(
     "Navigation",
-    ["Overview", "Predictive Analytics", "Prescriptive Analytics"]
+    ["Overview", "Descriptive Analytics", "Predictive Analytics", "Prescriptive Analytics"]
 )
 
 if "patient_id" in df.columns:
@@ -138,64 +133,91 @@ c4.markdown(f"<div class='kpi'><div class='kpi-title'>Time in Range</div><div cl
 st.markdown("---")
 
 # ======================================================
-# OVERVIEW (IMPROVED EXPLAINABLE GRAPH)
+# OVERVIEW (IMPROVED)
 # ======================================================
 if menu == "Overview":
 
     st.subheader("📊 Clinical Glucose Intelligence View")
 
-    # 🔥 SMART CLINICAL GRAPH (NOT JUST LINE CHART)
     fig = go.Figure()
 
-    # glucose line
     fig.add_trace(go.Scatter(
         x=df["time"],
         y=df["glucose"],
         mode="lines",
-        name="Glucose Level",
+        name="Glucose",
         line=dict(color="#4FC3F7", width=2)
     ))
 
-    # safe range zone
-    fig.add_hrect(
-        y0=70, y1=180,
-        fillcolor="green",
-        opacity=0.1,
-        line_width=0
-    )
+    fig.add_hrect(y0=70, y1=180, fillcolor="green", opacity=0.1)
 
-    # hypoglycemia threshold
-    fig.add_hline(
-        y=70,
-        line_dash="dash",
-        line_color="red"
-    )
-
-    # hyperglycemia threshold
-    fig.add_hline(
-        y=180,
-        line_dash="dash",
-        line_color="orange"
-    )
-
-    fig.update_layout(
-        title="Glucose Pattern with Clinical Risk Zones",
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font_color="white"
-    )
+    fig.add_hline(y=70, line_dash="dash", line_color="red")
+    fig.add_hline(y=180, line_dash="dash", line_color="orange")
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # EXPLANATION
     st.info("""
-    🧠 Clinical Interpretation:
-    • Blue line = glucose trend over time  
-    • Green zone = safe glucose range (70–180 mg/dL)  
-    • Red line = hypoglycemia risk  
-    • Orange line = hyperglycemia risk  
+    🧠 Interpretation:
+    • Green zone = safe glucose range  
+    • Red line = hypoglycemia  
+    • Orange line = hyperglycemia  
+    """)
 
-    👉 This helps clinicians instantly identify instability patterns.
+# ======================================================
+# DESCRIPTIVE ANALYTICS (NEW SECTION ⭐)
+# ======================================================
+elif menu == "Descriptive Analytics":
+
+    st.subheader("📊 Descriptive Clinical Analytics")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        fig = px.histogram(
+            df,
+            x="glucose",
+            nbins=30,
+            title="Glucose Distribution",
+            color_discrete_sequence=["#4FC3F7"]
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+
+        tir_df = pd.DataFrame({
+            "Category": ["Low (<70)", "In Range (70-180)", "High (>180)"],
+            "Value": [
+                (df["glucose"] < 70).mean(),
+                df["glucose"].between(70,180).mean(),
+                (df["glucose"] > 180).mean()
+            ]
+        })
+
+        fig = px.pie(
+            tir_df,
+            names="Category",
+            values="Value",
+            title="Time In Range Distribution"
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+    # variability chart
+    fig2 = px.line(
+        df,
+        x="time",
+        y="glucose_rolling_std",
+        title="Glucose Variability (Stability Indicator)"
+    )
+
+    st.plotly_chart(fig2, use_container_width=True)
+
+    st.info("""
+    📌 Key Insights:
+    • High variability = unstable diabetes control  
+    • Pie chart shows time spent in risk zones  
+    • Distribution helps detect glucose imbalance pattern  
     """)
 
 # ======================================================
@@ -207,12 +229,12 @@ elif menu == "Predictive Analytics":
 
     df["risk"] = df["glucose_roc"].abs() + df["glucose_rolling_std"]
 
-    fig = px.line(df, x="time", y="risk", title="Glucose Instability Risk Score")
-    fig.update_layout(template="plotly_dark")
+    fig = px.line(df, x="time", y="risk",
+                  title="Glucose Instability Risk Score")
 
     st.plotly_chart(fig, use_container_width=True)
 
-    st.info("Higher score = unstable glucose + higher clinical risk")
+    st.info("Higher risk score = higher chance of hypoglycemia or instability")
 
 # ======================================================
 # PRESCRIPTIVE
@@ -223,9 +245,33 @@ elif menu == "Prescriptive Analytics":
 
     df["risk_level"] = np.where(df["glucose"] > 180, "High Risk", "Stable")
 
-    fig = px.scatter(df, x="time", y="glucose", color="risk_level")
-    fig.update_layout(template="plotly_dark")
+    fig = px.scatter(
+        df,
+        x="time",
+        y="glucose",
+        color="risk_level"
+    )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    st.success("AI suggests monitoring insulin response & meal timing closely")
+    st.success("""
+    AI Recommendation:
+    • Monitor insulin timing  
+    • Reduce high-carb spikes  
+    • Maintain physical activity consistency  
+    """)
+
+# ======================================================
+# FOOTER INSIGHT
+# ======================================================
+st.markdown("---")
+
+st.subheader("📌 Clinical Summary")
+
+st.info(f"""
+✔ Average Glucose: {avg:.1f} mg/dL  
+✔ Time in Range: {tir:.1f}%  
+✔ Max: {mx:.1f} | Min: {mn:.1f}  
+
+👉 Overall: {'Stable control' if tir > 70 else 'Needs intervention'}
+""")
