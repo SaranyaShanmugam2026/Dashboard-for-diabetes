@@ -40,8 +40,8 @@ st.caption("Predictive • Prescriptive • Explainable Clinical Analytics")
 # =========================
 @st.cache_data
 def load_data():
-    df = pd.read_excel("cleaned_hupa_diabetes_recent (1).xlsb", engine="pyxlsb")
-    demo = pd.read_csv("cleaned_demographics (1).csv")
+    df = pd.read_excel("cleaned_hupa_diabetes_recent.xlsb", engine="pyxlsb")
+    demo = pd.read_csv("cleaned_demographics.csv")
 
     df["time"] = pd.to_datetime(df["time"], errors="coerce")
     df = df.merge(demo, on="patient_id", how="left")
