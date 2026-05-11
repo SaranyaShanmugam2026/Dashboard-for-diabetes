@@ -2,202 +2,186 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 
-# =========================================================
+# ======================================================
 # PAGE CONFIG
-# =========================================================
+# ======================================================
 st.set_page_config(
-    page_title="Clinical AI Diabetes Dashboard",
+    page_title="AI Diabetes Intelligence Dashboard",
     page_icon="🩺",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# =========================================================
-# LOAD DATA
-# =========================================================
+# ======================================================
+# LOAD DATA (FIXED FOR YOUR FILES)
+# ======================================================
 @st.cache_data
 def load_data():
 
-    demo = pd.read_csv("cleaned_demographics.csv")
-
-    diabetes = pd.read_excel(
-        "cleaned_hupa_diabetes_recent.xlsb",
+    # ✔ YOUR FILES
+    demo = pd.read_csv("cleaned_demographics(1).csv")
+    df = pd.read_excel(
+        "cleaned_hupa_diabetes_recent(1).xlsb",
         engine="pyxlsb"
     )
 
-    if "patient_id" in demo.columns and "patient_id" in diabetes.columns:
-        df = diabetes.merge(demo, on="patient_id", how="left")
-    else:
-        df = diabetes.copy()
+    # merge if possible
+    if "patient_id" in demo.columns and "patient_id" in df.columns:
+        df = df.merge(demo, on="patient_id", how="left")
 
-    df["time"] = pd.to_datetime(df["time"])
-    df = df.sort_values("time")
+    # datetime
+    if "time" in df.columns:
+        df["time"] = pd.to_datetime(df["time"])
+        df = df.sort_values("time")
+        df["hour"] = df["time"].dt.hour
 
-    df["glucose_roc"] = df["glucose"].diff()
-    df["glucose_std"] = df["glucose"].rolling(12).std().fillna(0)
+    # ======================================================
+    # SAFE FEATURE ENGINEERING (IMPORTANT FIX)
+    # ======================================================
+
+    if "glucose" in df.columns:
+        df["glucose_roc"] = df["glucose"].diff()
+        df["glucose_rolling_std"] = df["glucose"].rolling(12).std().fillna(0)
+
+    if "heart_rate" in df.columns:
+        df["hr_clean"] = df["heart_rate"]
+
+    if "steps" not in df.columns:
+        df["steps"] = 0
+
+    if "calories" not in df.columns:
+        df["calories"] = 0
 
     return df
 
+
 df = load_data()
 
-# =========================================================
-# SIDEBAR CONTROLS
-# =========================================================
-st.sidebar.title("🧠 Clinical Controls")
+# ======================================================
+# SIDEBAR
+# ======================================================
+st.sidebar.title("🧠 AI Diabetes Dashboard")
 
-hypo = st.sidebar.slider("Hypoglycemia Threshold", 50, 80, 70)
-hyper = st.sidebar.slider("Hyperglycemia Threshold", 150, 250, 180)
-
-patient = st.sidebar.selectbox(
-    "Select Patient",
-    ["All"] + list(df["patient_id"].unique())
+menu = st.sidebar.radio(
+    "Navigation",
+    ["Overview", "Descriptive Analytics", "Predictive Analytics", "Prescriptive Analytics"]
 )
 
-if patient != "All":
-    df = df[df["patient_id"] == patient]
+patient_list = ["All Patients"] + list(df["patient_id"].unique())
+selected_patient = st.sidebar.selectbox("Select Patient", patient_list)
 
-# =========================================================
-# TITLE
-# =========================================================
+if selected_patient != "All Patients":
+    df = df[df["patient_id"] == selected_patient]
+
+# ======================================================
+# HEADER
+# ======================================================
 st.title("🩺 AI Clinical Diabetes Intelligence System")
 
-# =========================================================
-# KPI CALCULATION
-# =========================================================
+# ======================================================
+# KPI METRICS
+# ======================================================
 avg_glucose = df["glucose"].mean()
 max_glucose = df["glucose"].max()
 min_glucose = df["glucose"].min()
 
-tir = df["glucose"].between(hypo, hyper).mean() * 100
+tir = df["glucose"].between(70, 180).mean() * 100
 
-hyper_count = (df["glucose"] > hyper).sum()
-hypo_count = (df["glucose"] < hypo).sum()
-
-# =========================================================
-# BEAUTIFUL KPI CARDS
-# =========================================================
 col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("📊 Avg Glucose", f"{avg_glucose:.1f} mg/dL")
+col1.metric("📊 Avg Glucose", f"{avg_glucose:.1f}")
 col2.metric("🔺 Max Glucose", f"{max_glucose:.1f}")
 col3.metric("🔻 Min Glucose", f"{min_glucose:.1f}")
 col4.metric("🎯 Time in Range", f"{tir:.1f}%")
 
-# =========================================================
-# PIE CHART - TIME IN RANGE
-# =========================================================
-st.subheader("📌 Time in Range Distribution")
+# ======================================================
+# OVERVIEW
+# ======================================================
+if menu == "Overview":
 
-tir_data = pd.DataFrame({
-    "Category": ["Low (<70)", "In Range (70–180)", "High (>180)"],
-    "Value": [
-        hypo_count,
-        ((df["glucose"] >= hypo) & (df["glucose"] <= hyper)).sum(),
-        hyper_count
-    ]
-})
+    st.subheader("📘 Dataset Overview")
 
-fig_pie = px.pie(
-    tir_data,
-    names="Category",
-    values="Value",
-    title="Glucose Distribution Overview",
-    hole=0.4
-)
+    fig = px.line(
+        df,
+        x="time",
+        y="glucose",
+        color="patient_id",
+        title="Glucose Trend"
+    )
 
-st.plotly_chart(fig_pie, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True)
 
-# =========================================================
-# GLUCOSE TREND
-# =========================================================
-st.subheader("📈 24-Hour Glucose Trend")
+    fig2 = px.histogram(df, x="glucose", nbins=30)
+    st.plotly_chart(fig2, use_container_width=True)
 
-fig_line = px.line(
-    df,
-    x="time",
-    y="glucose",
-    title="Glucose Trend Over Time",
-    color_discrete_sequence=["#00B4DB"]
-)
+# ======================================================
+# DESCRIPTIVE ANALYTICS
+# ======================================================
+elif menu == "Descriptive Analytics":
 
-fig_line.add_hline(y=hypo, line_dash="dash", line_color="red")
-fig_line.add_hline(y=hyper, line_dash="dash", line_color="orange")
+    st.subheader("📊 Analytics")
 
-st.plotly_chart(fig_line, use_container_width=True)
+    fig = px.scatter(
+        df,
+        x="heart_rate",
+        y="glucose",
+        color="steps"
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
-# =========================================================
-# RISK DISTRIBUTION (DONUT CHART)
-# =========================================================
-st.subheader("🚨 Risk Distribution")
+    fig2 = px.line(
+        df,
+        x="time",
+        y="glucose_rolling_std",
+        title="Glucose Variability"
+    )
+    st.plotly_chart(fig2, use_container_width=True)
 
-df["risk_category"] = np.where(
-    df["glucose"] > hyper, "High Risk",
-    np.where(df["glucose"] < hypo, "Low Risk", "Stable")
-)
+# ======================================================
+# PREDICTIVE ANALYTICS
+# ======================================================
+elif menu == "Predictive Analytics":
 
-risk_fig = px.pie(
-    df,
-    names="risk_category",
-    title="Risk Level Breakdown",
-    hole=0.5,
-    color_discrete_map={
-        "High Risk": "red",
-        "Low Risk": "blue",
-        "Stable": "green"
-    }
-)
+    st.subheader("🤖 Risk Prediction")
 
-st.plotly_chart(risk_fig, use_container_width=True)
+    df["risk_score"] = (
+        df["glucose_roc"].fillna(0).abs() * 0.5 +
+        df["glucose_rolling_std"].fillna(0) * 0.5
+    )
 
-# =========================================================
-# GLUCOSE VARIABILITY
-# =========================================================
-st.subheader("📊 Glucose Variability (Stability Indicator)")
+    fig = px.line(df, x="time", y="risk_score")
+    st.plotly_chart(fig, use_container_width=True)
 
-fig_var = px.line(
-    df,
-    y="glucose_std",
-    title="Rolling Glucose Variability"
-)
+# ======================================================
+# PRESCRIPTIVE ANALYTICS
+# ======================================================
+elif menu == "Prescriptive Analytics":
 
-st.plotly_chart(fig_var, use_container_width=True)
+    st.subheader("🧠 Clinical Decisions")
 
-# =========================================================
-# CLINICAL EXPLANATION BOXES
-# =========================================================
+    df["risk_level"] = np.where(df["glucose"] > 180, "High Risk", "Stable")
+
+    fig = px.scatter(
+        df,
+        x="time",
+        y="glucose",
+        color="risk_level"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+# ======================================================
+# INSIGHTS
+# ======================================================
 st.markdown("---")
-st.subheader("🧠 Clinical Interpretation")
+st.subheader("📌 Clinical Insights")
 
-if tir > 70:
-    st.success("✔ Patient is maintaining good glucose control (TIR > 70%)")
-else:
-    st.warning("⚠ Patient is below optimal glucose stability threshold")
+st.info(f"""
+✔ Average glucose: {avg_glucose:.1f} mg/dL  
+✔ Time in Range: {tir:.1f}%  
 
-if hyper_count > 10:
-    st.error("⚠ Frequent hyperglycemia detected → review insulin strategy")
-
-if hypo_count > 5:
-    st.error("⚠ Hypoglycemia risk detected → adjust basal insulin")
-
-# =========================================================
-# INSIGHT SUMMARY BOX
-# =========================================================
-st.markdown("### 📌 AI Summary")
-
-st.info(
-    f"""
-    • Average glucose: {avg_glucose:.1f} mg/dL  
-    • Time in Range: {tir:.1f}%  
-    • Hyper events: {hyper_count}  
-    • Hypo events: {hypo_count}  
-
-    👉 Overall pattern suggests:
-    {'Stable metabolic control' if tir > 70 else 'Unstable glucose regulation'}
-    """
-)
-
-# =========================================================
-# FOOTER
-# =========================================================
-st.markdown("---")
-st.caption("Clinical AI Diabetes Dashboard | Enhanced Visualization System")
+👉 Interpretation:
+{'Stable glucose control' if tir > 70 else 'Unstable glucose pattern detected'}
+""")
