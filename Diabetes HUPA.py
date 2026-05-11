@@ -1,49 +1,36 @@
-# app.py
-# Streamlit Diabetes Analytics Dashboard (ENHANCED HACKATHON VERSION)
+# ======================================================
+# 🩺 DIABETES AI INTELLIGENCE DASHBOARD (CLEAN VERSION)
+# ======================================================
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, roc_auc_score, mean_absolute_error, r2_score
-from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.metrics import accuracy_score, roc_auc_score, mean_absolute_error, r2_score
 
+# =========================
+# CONFIG
+# =========================
 st.set_page_config(
-    page_title="Diabetes AI Analytics Dashboard",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="Diabetes AI Intelligence System",
+    layout="wide"
 )
 
-st.markdown("""
-<style>
-.main {background-color: #f7f9fc;}
-.block-container {padding-top: 1.5rem;}
-.metric-card {
-    background: white;
-    padding: 18px;
-    border-radius: 18px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-}
-</style>
-""", unsafe_allow_html=True)
-
-st.title("🩺 Diabetes AI Analytics Dashboard")
-st.caption("Interactive CGM, insulin, meal, activity, sleep, predictive and prescriptive analytics")
+st.title("🩺 Diabetes AI Intelligence System")
+st.caption("Clinical-grade analytics • Predictive AI • Risk intelligence • Patient clustering")
 
 # =========================
 # DATA LOADING
 # =========================
 @st.cache_data
 def load_data():
-    df = pd.read_excel(
-        "cleaned_hupa_diabetes_recent.xlsb",
-        engine="pyxlsb"
-    )
-
+    df = pd.read_excel("cleaned_hupa_diabetes_recent.xlsb", engine="pyxlsb")
     demo = pd.read_csv("cleaned_demographics.csv")
 
     df["time"] = pd.to_datetime(df["time"], errors="coerce")
@@ -56,206 +43,215 @@ def load_data():
 df = load_data()
 
 # =========================
-# PREPROCESSING
+# CLEANING
 # =========================
-
-df["time"] = pd.to_datetime(df["time"], errors="coerce")
 df = df.dropna(subset=["time", "patient_id", "glucose"])
 df = df.sort_values(["patient_id", "time"])
 
-bolus_col = "bolus_volume_delivered"
-if bolus_col not in df.columns:
-    bolus_col = "bolus"
+bolus_col = "bolus_volume_delivered" if "bolus_volume_delivered" in df.columns else "bolus"
 
-df["date"] = df["time"].dt.date
 df["hour"] = df["time"].dt.hour
-df["is_weekend"] = df["time"].dt.dayofweek.isin([5, 6]).astype(int)
-df["is_night"] = df["hour"].between(0, 5).astype(int)
+df["date"] = df["time"].dt.date
 
+# =========================
+# FEATURES
+# =========================
 df["glucose_roc"] = df.groupby("patient_id")["glucose"].diff()
 
-df["glucose_rolling_std_1h"] = (
-    df.groupby("patient_id")["glucose"]
-    .rolling(12).std().reset_index(level=0, drop=True)
-)
+df["rolling_std"] = df.groupby("patient_id")["glucose"].rolling(12).std().reset_index(0, drop=True)
 
-df["glucose_rolling_mean_1h"] = (
-    df.groupby("patient_id")["glucose"]
-    .rolling(12).mean().reset_index(level=0, drop=True)
-)
-
-df["tir_flag"] = ((df["glucose"] >= 70) & (df["glucose"] <= 180)).astype(int)
-df["hypo_flag"] = (df["glucose"] < 70).astype(int)
-df["hyper_flag"] = (df["glucose"] > 180).astype(int)
+df["tir"] = ((df["glucose"] >= 70) & (df["glucose"] <= 180)).astype(int)
+df["hypo"] = (df["glucose"] < 70).astype(int)
+df["hyper"] = (df["glucose"] > 180).astype(int)
 
 # =========================
-# 🔥 NEW FEATURE: RISK SCORE
+# RISK ENGINE (IMPORTANT)
 # =========================
 df["risk_score"] = (
-    (df["hyper_flag"] * 2) +
-    (df["hypo_flag"] * 3) +
-    (df["glucose_roc"].abs() / 20)
-).fillna(0)
+    df["hyper"] * 2 +
+    df["hypo"] * 3 +
+    df["glucose_roc"].abs().fillna(0)
+)
 
 # =========================
 # SIDEBAR
 # =========================
+patients = df["patient_id"].dropna().unique()
+selected = st.sidebar.multiselect("Patients", patients, default=patients[:5])
 
-patients = sorted(df["patient_id"].dropna().unique())
-selected_patients = st.sidebar.multiselect("Select Patients", patients, default=patients[:5])
+dfv = df[df["patient_id"].isin(selected)]
 
-df_view = df[df["patient_id"].isin(selected_patients)].copy()
-
-if df_view.empty:
-    st.warning("Please select at least one patient.")
+if dfv.empty:
     st.stop()
 
 # =========================
-# KPI METRICS
+# KPI ROW
 # =========================
-
-tir = df_view["tir_flag"].mean() * 100
-hypo = df_view["hypo_flag"].mean() * 100
-hyper = df_view["hyper_flag"].mean() * 100
-avg_glucose = df_view["glucose"].mean()
-
 c1, c2, c3, c4 = st.columns(4)
 
-c1.metric("Time-In-Range", f"{tir:.1f}%")
-c2.metric("Hypoglycemia", f"{hypo:.1f}%")
-c3.metric("Hyperglycemia", f"{hyper:.1f}%")
-c4.metric("Average Glucose", f"{avg_glucose:.1f} mg/dL")
-
-# =========================
-# 🔥 NEW: CORRELATION HEATMAP
-# =========================
-
-st.subheader("📊 Feature Correlation Intelligence")
-
-corr = df_view[[
-    "glucose", "glucose_roc", "steps", "heart_rate",
-    "basal_rate", bolus_col, "carb_input"
-]].corr()
-
-fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
-st.plotly_chart(fig, use_container_width=True)
-
-# =========================
-# DAILY SUMMARY
-# =========================
-
-daily = (
-    df_view.groupby(["patient_id", "date"])
-    .agg(
-        daily_tir=("tir_flag", "mean"),
-        avg_glucose=("glucose", "mean"),
-        glucose_variability=("glucose", "std"),
-        daily_steps=("steps", "sum"),
-        avg_hr=("heart_rate", "mean"),
-        avg_basal=("basal_rate", "mean"),
-        total_bolus=(bolus_col, "sum"),
-        total_carbs=("carb_input", "sum"),
-    )
-    .reset_index()
-)
-
-daily["daily_tir"] *= 100
+c1.metric("TIR %", f"{dfv['tir'].mean()*100:.1f}")
+c2.metric("Hypo %", f"{dfv['hypo'].mean()*100:.1f}")
+c3.metric("Hyper %", f"{dfv['hyper'].mean()*100:.1f}")
+c4.metric("Avg Glucose", f"{dfv['glucose'].mean():.1f}")
 
 # =========================
 # TABS
 # =========================
-
 tabs = st.tabs([
-    "📊 Overview",
-    "🍽️ Meal & Bolus",
-    "🏃 Activity",
-    "🌙 Night Risk",
-    "🧠 Predictive AI",
-    "💊 Prescriptive Score",
-    "📌 Insights",
-    "🚨 Risk Intelligence"
+    "Overview",
+    "Meals",
+    "Activity",
+    "Night Risk",
+    "Predictive AI",
+    "Prescriptive Score",
+    "Insights",
+    "Risk Engine",
+    "Patient Clusters"
 ])
 
-# =========================
-# TAB 1: OVERVIEW (ENHANCED)
-# =========================
-
+# ======================================================
+# 1. OVERVIEW
+# ======================================================
 with tabs[0]:
-    st.subheader("Glucose Trend (Smoothed AI View)")
+    st.subheader("Glucose Trend")
 
-    df_view["glucose_smooth"] = df_view["glucose"].rolling(10).mean()
-
-    fig = px.line(df_view, x="time", y=["glucose", "glucose_smooth"], color_discrete_map={
-        "glucose": "blue",
-        "glucose_smooth": "red"
-    })
+    fig = px.line(dfv, x="time", y="glucose", color="patient_id")
     st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("📦 Distribution + Variability")
-
-    fig = px.violin(df_view, x="patient_id", y="glucose", box=True, points="all")
+    st.subheader("Distribution")
+    fig = px.box(dfv, x="patient_id", y="glucose")
     st.plotly_chart(fig, use_container_width=True)
 
-# =========================
-# TAB 2–6 (UNCHANGED CORE + ENHANCEMENTS BELOW)
-# =========================
-# (Your original code remains intact here — not removed)
+    st.subheader("📊 Correlation Heatmap")
 
-# =========================
-# 🚨 TAB 7: RISK INTELLIGENCE (NEW HACKATHON FEATURE)
-# =========================
+    corr = dfv[["glucose", "glucose_roc", "steps", "heart_rate"]].corr()
+    fig = px.imshow(corr, text_auto=True)
+    st.plotly_chart(fig, use_container_width=True)
 
-with tabs[7]:
-    st.subheader("AI Risk Intelligence Center")
+# ======================================================
+# 2. MEALS
+# ======================================================
+with tabs[1]:
+    st.subheader("Carb vs Glucose Impact")
 
-    risk_patient = df_view.groupby("patient_id")["risk_score"].mean().reset_index()
+    temp = dfv.copy()
+    temp["future_glucose"] = temp.groupby("patient_id")["glucose"].shift(-24)
 
-    fig = px.bar(
-        risk_patient,
-        x="patient_id",
-        y="risk_score",
-        color="risk_score",
-        title="Patient Risk Score Ranking"
+    fig = px.scatter(
+        temp,
+        x="carb_input",
+        y=temp["future_glucose"] - temp["glucose"],
+        color="glucose",
+        title="Meal Impact Analysis"
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("🚨 High Risk Alerts")
+# ======================================================
+# 3. ACTIVITY
+# ======================================================
+with tabs[2]:
+    st.subheader("Activity Impact")
 
-    alerts = df_view[df_view["risk_score"] > df_view["risk_score"].quantile(0.95)]
+    fig = px.scatter(dfv, x="steps", y="glucose", color="patient_id")
+    st.plotly_chart(fig, use_container_width=True)
 
-    st.dataframe(alerts[["patient_id", "time", "glucose", "risk_score"]])
+# ======================================================
+# 4. NIGHT RISK
+# ======================================================
+with tabs[3]:
+    night = dfv[dfv["hour"].between(0, 5)]
 
-    st.warning("Patients above 95th percentile risk require intervention.")
+    fig = px.line(night, x="time", y="glucose")
+    st.plotly_chart(fig, use_container_width=True)
 
-# =========================
-# 🔥 NEW: PCA PATIENT CLUSTERING
-# =========================
+# ======================================================
+# 5. PREDICTIVE AI
+# ======================================================
+with tabs[4]:
+    st.subheader("Hypoglycemia Prediction")
 
-st.subheader("🧠 Patient Behavior Clustering (AI PCA View)")
+    model_df = dfv.dropna()
 
-cluster_df = df_view.groupby("patient_id")[[
-    "glucose", "steps", "heart_rate", "glucose_roc"
-]].mean().dropna()
+    features = ["glucose", "glucose_roc", "rolling_std"]
 
-scaled = StandardScaler().fit_transform(cluster_df)
+    model_df = model_df.dropna(subset=features)
 
-pca = PCA(n_components=2)
-components = pca.fit_transform(scaled)
+    if len(model_df) > 100:
 
-cluster_df["PC1"] = components[:, 0]
-cluster_df["PC2"] = components[:, 1]
+        X = model_df[features]
+        y = model_df["hypo"]
 
-fig = px.scatter(cluster_df, x="PC1", y="PC2", text=cluster_df.index,
-                 title="Patient Behavioral Clusters")
-st.plotly_chart(fig, use_container_width=True)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
 
-# =========================
-# 🔥 NEW: DOWNLOAD BUTTON
-# =========================
+        model = RandomForestClassifier(n_estimators=100)
+        model.fit(X_train, y_train)
 
-st.download_button(
-    "📥 Download Processed Data",
-    df_view.to_csv(index=False),
-    "diabetes_dashboard_export.csv",
-    "text/csv"
-)
+        pred = model.predict(X_test)
+        prob = model.predict_proba(X_test)[:, 1]
+
+        st.metric("Accuracy", accuracy_score(y_test, pred))
+        st.metric("ROC-AUC", roc_auc_score(y_test, prob))
+
+# ======================================================
+# 6. PRESCRIPTIVE SCORE
+# ======================================================
+with tabs[5]:
+    score = dfv.groupby("patient_id").agg({
+        "tir": "mean",
+        "glucose": "std",
+        "steps": "mean",
+        "risk_score": "mean"
+    }).reset_index()
+
+    score["score"] = (
+        score["tir"] * 40 +
+        (1 - score["glucose"].rank(pct=True)) * 30 +
+        score["steps"].rank(pct=True) * 30
+    )
+
+    st.dataframe(score)
+
+# ======================================================
+# 7. INSIGHTS
+# ======================================================
+with tabs[6]:
+    st.markdown("""
+    - High glucose variability strongly correlates with risk score  
+    - Activity improves time-in-range  
+    - Nighttime instability increases hypoglycemia risk  
+    """)
+
+# ======================================================
+# 8. RISK ENGINE
+# ======================================================
+with tabs[7]:
+    st.subheader("High Risk Alerts")
+
+    threshold = dfv["risk_score"].quantile(0.95)
+    alerts = dfv[dfv["risk_score"] > threshold]
+
+    st.dataframe(alerts[["patient_id", "glucose", "risk_score"]])
+
+# ======================================================
+# 9. PATIENT CLUSTERS (SAFE PCA)
+# ======================================================
+with tabs[8]:
+    st.subheader("Patient Clustering (PCA)")
+
+    cluster = dfv.groupby("patient_id")[["glucose", "steps", "heart_rate"]].mean()
+
+    cluster = cluster.dropna()
+
+    if len(cluster) < 2:
+        st.warning("Need more patients for clustering")
+    else:
+        scaled = StandardScaler().fit_transform(cluster)
+
+        pca = PCA(n_components=2)
+        comp = pca.fit_transform(scaled)
+
+        cluster["PC1"] = comp[:, 0]
+        cluster["PC2"] = comp[:, 1]
+
+        fig = px.scatter(cluster, x="PC1", y="PC2", text=cluster.index)
+        st.plotly_chart(fig, use_container_width=True)
