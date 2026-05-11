@@ -7,7 +7,7 @@ import plotly.express as px
 # PAGE CONFIG
 # =========================================================
 st.set_page_config(
-    page_title="Clinical AI Diabetes System",
+    page_title="Clinical AI Diabetes Dashboard",
     page_icon="🩺",
     layout="wide"
 )
@@ -30,193 +30,174 @@ def load_data():
     else:
         df = diabetes.copy()
 
-    if "time" in df.columns:
-        df["time"] = pd.to_datetime(df["time"])
-        df = df.sort_values("time")
+    df["time"] = pd.to_datetime(df["time"])
+    df = df.sort_values("time")
 
-    # Basic feature engineering
-    if "glucose" in df.columns:
-        df["glucose_roc"] = df["glucose"].diff()
-        df["glucose_std"] = df["glucose"].rolling(12).std().fillna(0)
+    df["glucose_roc"] = df["glucose"].diff()
+    df["glucose_std"] = df["glucose"].rolling(12).std().fillna(0)
 
     return df
 
 df = load_data()
 
 # =========================================================
-# SIDEBAR - INTERACTIVE CONTROLS
+# SIDEBAR CONTROLS
 # =========================================================
-st.sidebar.title("🧠 Clinical AI Controls")
+st.sidebar.title("🧠 Clinical Controls")
 
-patient_list = ["All"] + list(df["patient_id"].unique()) if "patient_id" in df.columns else ["All"]
+hypo = st.sidebar.slider("Hypoglycemia Threshold", 50, 80, 70)
+hyper = st.sidebar.slider("Hyperglycemia Threshold", 150, 250, 180)
 
-patient = st.sidebar.selectbox("Select Patient", patient_list)
-
-hypo_threshold = st.sidebar.slider("Hypoglycemia Threshold", 50, 80, 70)
-hyper_threshold = st.sidebar.slider("Hyperglycemia Threshold", 150, 250, 180)
-time_window = st.sidebar.slider("Time Window (hours)", 6, 72, 24)
-
-compare_mode = st.sidebar.multiselect(
-    "Compare Patients",
-    df["patient_id"].unique() if "patient_id" in df.columns else []
+patient = st.sidebar.selectbox(
+    "Select Patient",
+    ["All"] + list(df["patient_id"].unique())
 )
 
-insulin_sim = st.sidebar.slider("Simulated Insulin Effect (%)", 0, 50, 0)
-
-# =========================================================
-# FILTER DATA
-# =========================================================
 if patient != "All":
     df = df[df["patient_id"] == patient]
-
-if "time" in df.columns:
-    max_time = df["time"].max()
-    min_time = max_time - pd.Timedelta(hours=time_window)
-    df = df[df["time"] >= min_time]
 
 # =========================================================
 # TITLE
 # =========================================================
-st.title("🩺 Clinical AI Diabetes Intelligence System")
+st.title("🩺 AI Clinical Diabetes Intelligence System")
 
 # =========================================================
-# KPI SECTION (DYNAMIC)
+# KPI CALCULATION
+# =========================================================
+avg_glucose = df["glucose"].mean()
+max_glucose = df["glucose"].max()
+min_glucose = df["glucose"].min()
+
+tir = df["glucose"].between(hypo, hyper).mean() * 100
+
+hyper_count = (df["glucose"] > hyper).sum()
+hypo_count = (df["glucose"] < hypo).sum()
+
+# =========================================================
+# BEAUTIFUL KPI CARDS
 # =========================================================
 col1, col2, col3, col4 = st.columns(4)
 
-if "glucose" in df.columns:
-
-    col1.metric("Avg Glucose", round(df["glucose"].mean(), 2))
-    col2.metric("Max Glucose", round(df["glucose"].max(), 2))
-    col3.metric("Min Glucose", round(df["glucose"].min(), 2))
-
-    tir = df["glucose"].between(hypo_threshold, hyper_threshold).mean() * 100
-    col4.metric("Time in Range %", round(tir, 2))
+col1.metric("📊 Avg Glucose", f"{avg_glucose:.1f} mg/dL")
+col2.metric("🔺 Max Glucose", f"{max_glucose:.1f}")
+col3.metric("🔻 Min Glucose", f"{min_glucose:.1f}")
+col4.metric("🎯 Time in Range", f"{tir:.1f}%")
 
 # =========================================================
-# RISK SCORE (DYNAMIC AI LOGIC)
+# PIE CHART - TIME IN RANGE
 # =========================================================
-if "glucose" in df.columns:
+st.subheader("📌 Time in Range Distribution")
 
-    df["risk_score"] = (
-        (df["glucose"] > hyper_threshold).astype(int) * 0.6 +
-        (df["glucose"] < hypo_threshold).astype(int) * 0.6 +
-        df["glucose_std"]
-    )
+tir_data = pd.DataFrame({
+    "Category": ["Low (<70)", "In Range (70–180)", "High (>180)"],
+    "Value": [
+        hypo_count,
+        ((df["glucose"] >= hypo) & (df["glucose"] <= hyper)).sum(),
+        hyper_count
+    ]
+})
 
-    # =====================================================
-    # SIMULATION (WHAT-IF INSULIN EFFECT)
-    # =====================================================
-    df["simulated_glucose"] = df["glucose"] - (df.get("insulin", 0) * insulin_sim * 0.1)
+fig_pie = px.pie(
+    tir_data,
+    names="Category",
+    values="Value",
+    title="Glucose Distribution Overview",
+    hole=0.4
+)
 
-# =========================================================
-# MAIN CHARTS (INTERACTIVE)
-# =========================================================
-st.subheader("📈 Glucose Trend (Interactive)")
-
-if "time" in df.columns and "glucose" in df.columns:
-
-    fig = px.line(
-        df,
-        x="time",
-        y="glucose",
-        color="patient_id" if "patient_id" in df.columns else None,
-        title="Real-Time Glucose Trend"
-    )
-
-    fig.add_hline(y=hypo_threshold, line_dash="dash", line_color="red")
-    fig.add_hline(y=hyper_threshold, line_dash="dash", line_color="orange")
-
-    st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig_pie, use_container_width=True)
 
 # =========================================================
-# RISK VISUALIZATION
+# GLUCOSE TREND
 # =========================================================
-st.subheader("🚨 Risk Analysis Engine")
+st.subheader("📈 24-Hour Glucose Trend")
 
-if "glucose" in df.columns:
+fig_line = px.line(
+    df,
+    x="time",
+    y="glucose",
+    title="Glucose Trend Over Time",
+    color_discrete_sequence=["#00B4DB"]
+)
 
-    fig2 = px.scatter(
-        df,
-        x="time",
-        y="glucose",
-        color="risk_score",
-        title="Glucose Risk Heatmap"
-    )
+fig_line.add_hline(y=hypo, line_dash="dash", line_color="red")
+fig_line.add_hline(y=hyper, line_dash="dash", line_color="orange")
 
-    st.plotly_chart(fig2, use_container_width=True)
+st.plotly_chart(fig_line, use_container_width=True)
+
+# =========================================================
+# RISK DISTRIBUTION (DONUT CHART)
+# =========================================================
+st.subheader("🚨 Risk Distribution")
+
+df["risk_category"] = np.where(
+    df["glucose"] > hyper, "High Risk",
+    np.where(df["glucose"] < hypo, "Low Risk", "Stable")
+)
+
+risk_fig = px.pie(
+    df,
+    names="risk_category",
+    title="Risk Level Breakdown",
+    hole=0.5,
+    color_discrete_map={
+        "High Risk": "red",
+        "Low Risk": "blue",
+        "Stable": "green"
+    }
+)
+
+st.plotly_chart(risk_fig, use_container_width=True)
 
 # =========================================================
 # GLUCOSE VARIABILITY
 # =========================================================
-st.subheader("📊 Glucose Variability")
+st.subheader("📊 Glucose Variability (Stability Indicator)")
 
-if "glucose_std" in df.columns:
+fig_var = px.line(
+    df,
+    y="glucose_std",
+    title="Rolling Glucose Variability"
+)
 
-    fig3 = px.line(
-        df,
-        y="glucose_std",
-        title="Rolling Glucose Variability"
-    )
-
-    st.plotly_chart(fig3, use_container_width=True)
+st.plotly_chart(fig_var, use_container_width=True)
 
 # =========================================================
-# WHAT-IF SIMULATION
+# CLINICAL EXPLANATION BOXES
 # =========================================================
-st.subheader("🧪 What-If Simulation")
+st.markdown("---")
+st.subheader("🧠 Clinical Interpretation")
 
-if "insulin" in df.columns:
+if tir > 70:
+    st.success("✔ Patient is maintaining good glucose control (TIR > 70%)")
+else:
+    st.warning("⚠ Patient is below optimal glucose stability threshold")
 
-    fig4 = px.line(
-        df,
-        x="time",
-        y=["glucose", "simulated_glucose"],
-        title="Actual vs Simulated Glucose Response"
-    )
+if hyper_count > 10:
+    st.error("⚠ Frequent hyperglycemia detected → review insulin strategy")
 
-    st.plotly_chart(fig4, use_container_width=True)
-
-# =========================================================
-# PATIENT COMPARISON
-# =========================================================
-if compare_mode:
-
-    st.subheader("👥 Patient Comparison")
-
-    compare_df = df[df["patient_id"].isin(compare_mode)]
-
-    fig5 = px.line(
-        compare_df,
-        x="time",
-        y="glucose",
-        color="patient_id",
-        title="Patient Comparison - Glucose Trends"
-    )
-
-    st.plotly_chart(fig5, use_container_width=True)
+if hypo_count > 5:
+    st.error("⚠ Hypoglycemia risk detected → adjust basal insulin")
 
 # =========================================================
-# AI INSIGHTS PANEL
+# INSIGHT SUMMARY BOX
 # =========================================================
-st.subheader("🧠 AI Insights Engine")
+st.markdown("### 📌 AI Summary")
 
-if "glucose" in df.columns:
+st.info(
+    f"""
+    • Average glucose: {avg_glucose:.1f} mg/dL  
+    • Time in Range: {tir:.1f}%  
+    • Hyper events: {hyper_count}  
+    • Hypo events: {hypo_count}  
 
-    avg_glucose = df["glucose"].mean()
-
-    if avg_glucose > hyper_threshold:
-        st.error("High glucose instability detected → risk of hyperglycemia")
-    elif avg_glucose < hypo_threshold:
-        st.warning("Low glucose trend → hypoglycemia risk")
-    else:
-        st.success("Metabolic pattern stable within target range")
-
-    if df["risk_score"].mean() > 1:
-        st.info("Elevated variability detected → monitor insulin response")
+    👉 Overall pattern suggests:
+    {'Stable metabolic control' if tir > 70 else 'Unstable glucose regulation'}
+    """
+)
 
 # =========================================================
 # FOOTER
 # =========================================================
 st.markdown("---")
-st.caption("Clinical AI System | Interactive Diabetes Intelligence Dashboard")
+st.caption("Clinical AI Diabetes Dashboard | Enhanced Visualization System")
